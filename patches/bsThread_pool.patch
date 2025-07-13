@@ -1,0 +1,13 @@
+diff --git a/modules/BS.thread_pool.cppm b/modules/BS.thread_pool.cppm
+index 1951240..543cbc9 100644
+--- a/modules/BS.thread_pool.cppm
++++ b/modules/BS.thread_pool.cppm
+@@ -42,7 +42,7 @@ using BS::thread_pool_native_extensions;
+ using BS::thread_pool_version;
+ using BS::tp;
+ using BS::version;
+-using BS::wait_deadlock;
++// using BS::wait_deadlock;
+ using BS::wdc_thread_pool;
+ 
+ #ifdef BS_THREAD_POOL_NATIVE_EXTENSIONS

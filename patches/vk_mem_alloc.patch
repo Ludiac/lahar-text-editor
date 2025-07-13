@@ -1,0 +1,248 @@
+diff --git a/include/vk_mem_alloc.hpp b/include/vk_mem_alloc.hpp
+index b1c19db..00ebdf2 100644
+--- a/include/vk_mem_alloc.hpp
++++ b/include/vk_mem_alloc.hpp
+@@ -7,22 +7,8 @@
+ 
+ #include <vulkan/vulkan_hpp_macros.hpp>
+ 
+-#ifdef VMA_ENABLE_STD_MODULE
+-import VULKAN_HPP_STD_MODULE;
+-#else
+-#include <algorithm>
+-#include <array>
+-#include <string>
+-#include <vector>
+-#endif
+-
+-#ifdef VMA_ENABLE_VULKAN_HPP_MODULE
+ import vulkan_hpp;
+-#else
+-#if !defined(VULKAN_HPP)
+-#include <vulkan/vulkan.hpp>
+-#endif
+-#endif
++import std;
+ 
+ #if !defined(VMA_HPP_NAMESPACE)
+ #define VMA_HPP_NAMESPACE vma
+@@ -41,8 +27,8 @@ createUniqueHandle(const T &t) VULKAN_HPP_NOEXCEPT {
+   return VULKAN_HPP_NAMESPACE::UniqueHandle<T, Dispatcher>(t);
+ }
+ template <class T, class O>
+-VULKAN_HPP_NAMESPACE::UniqueHandle<T, Dispatcher>
+-createUniqueHandle(const T &t, O o) VULKAN_HPP_NOEXCEPT {
++VULKAN_HPP_NAMESPACE::UniqueHandle<T, Dispatcher> createUniqueHandle(const T &t,
++                                                                     O o) VULKAN_HPP_NOEXCEPT {
+   return VULKAN_HPP_NAMESPACE::UniqueHandle<T, Dispatcher>(t, o);
+ }
+ template <class F, class S, class O>
+@@ -54,14 +40,11 @@ createUniqueHandle(const std::pair<F, S> &t, O o) VULKAN_HPP_NOEXCEPT {
+ }
+ 
+ template <class T, class UniqueVectorAllocator, class VectorAllocator, class O>
+-std::vector<VULKAN_HPP_NAMESPACE::UniqueHandle<T, Dispatcher>,
+-            UniqueVectorAllocator>
++std::vector<VULKAN_HPP_NAMESPACE::UniqueHandle<T, Dispatcher>, UniqueVectorAllocator>
+ createUniqueHandleVector(const std::vector<T, VectorAllocator> &vector, O o,
+-                         const UniqueVectorAllocator &vectorAllocator)
+-    VULKAN_HPP_NOEXCEPT {
+-  std::vector<VULKAN_HPP_NAMESPACE::UniqueHandle<T, Dispatcher>,
+-              UniqueVectorAllocator>
+-      result(vectorAllocator);
++                         const UniqueVectorAllocator &vectorAllocator) VULKAN_HPP_NOEXCEPT {
++  std::vector<VULKAN_HPP_NAMESPACE::UniqueHandle<T, Dispatcher>, UniqueVectorAllocator> result(
++      vectorAllocator);
+   result.reserve(vector.size());
+   for (const T &t : vector)
+     result.emplace_back(t, o);
+@@ -76,8 +59,7 @@ public:
+   Deleter(Owner owner) VULKAN_HPP_NOEXCEPT : owner(owner) {}
+ 
+ protected:
+-  void destroy(const T &t)
+-      VULKAN_HPP_NOEXCEPT; // Implemented manually for each handle type
++  void destroy(const T &t) VULKAN_HPP_NOEXCEPT; // Implemented manually for each handle type
+ };
+ template <class T> class Deleter<T, void> {
+ protected:
+@@ -87,28 +69,23 @@ protected:
+ namespace VULKAN_HPP_NAMESPACE {
+ template <> class UniqueHandleTraits<Buffer, VMA_HPP_NAMESPACE::Dispatcher> {
+ public:
+-  using deleter =
+-      VMA_HPP_NAMESPACE::Deleter<Buffer, VMA_HPP_NAMESPACE::Allocator>;
++  using deleter = VMA_HPP_NAMESPACE::Deleter<Buffer, VMA_HPP_NAMESPACE::Allocator>;
+ };
+ template <> class UniqueHandleTraits<Image, VMA_HPP_NAMESPACE::Dispatcher> {
+ public:
+-  using deleter =
+-      VMA_HPP_NAMESPACE::Deleter<Image, VMA_HPP_NAMESPACE::Allocator>;
++  using deleter = VMA_HPP_NAMESPACE::Deleter<Image, VMA_HPP_NAMESPACE::Allocator>;
+ };
+ } // namespace VULKAN_HPP_NAMESPACE
+ namespace VMA_HPP_NAMESPACE {
+-using UniqueBuffer =
+-    VULKAN_HPP_NAMESPACE::UniqueHandle<VULKAN_HPP_NAMESPACE::Buffer,
+-                                       Dispatcher>;
+-using UniqueImage =
+-    VULKAN_HPP_NAMESPACE::UniqueHandle<VULKAN_HPP_NAMESPACE::Image, Dispatcher>;
++using UniqueBuffer = VULKAN_HPP_NAMESPACE::UniqueHandle<VULKAN_HPP_NAMESPACE::Buffer, Dispatcher>;
++using UniqueImage = VULKAN_HPP_NAMESPACE::UniqueHandle<VULKAN_HPP_NAMESPACE::Image, Dispatcher>;
+ } // namespace VMA_HPP_NAMESPACE
+ #endif
+ 
+ #ifndef VULKAN_HPP_NO_EXCEPTIONS
+ namespace VMA_HPP_NAMESPACE::detail {
+-[[noreturn]] VULKAN_HPP_INLINE void
+-throwResultException(VULKAN_HPP_NAMESPACE::Result result, char const *message) {
++[[noreturn]] VULKAN_HPP_INLINE void throwResultException(VULKAN_HPP_NAMESPACE::Result result,
++                                                         char const *message) {
+   switch (result) {
+     using VULKAN_HPP_NAMESPACE::Result;
+   case Result::eErrorOutOfHostMemory:
+@@ -162,8 +139,7 @@ throwResultException(VULKAN_HPP_NAMESPACE::Result result, char const *message) {
+   case Result::eErrorVideoPictureLayoutNotSupportedKHR:
+     throw VULKAN_HPP_NAMESPACE::VideoPictureLayoutNotSupportedKHRError(message);
+   case Result::eErrorVideoProfileOperationNotSupportedKHR:
+-    throw VULKAN_HPP_NAMESPACE::VideoProfileOperationNotSupportedKHRError(
+-        message);
++    throw VULKAN_HPP_NAMESPACE::VideoProfileOperationNotSupportedKHRError(message);
+   case Result::eErrorVideoProfileFormatNotSupportedKHR:
+     throw VULKAN_HPP_NAMESPACE::VideoProfileFormatNotSupportedKHRError(message);
+   case Result::eErrorVideoProfileCodecNotSupportedKHR:
+@@ -171,8 +147,7 @@ throwResultException(VULKAN_HPP_NAMESPACE::Result result, char const *message) {
+   case Result::eErrorVideoStdVersionNotSupportedKHR:
+     throw VULKAN_HPP_NAMESPACE::VideoStdVersionNotSupportedKHRError(message);
+   case Result::eErrorInvalidDrmFormatModifierPlaneLayoutEXT:
+-    throw VULKAN_HPP_NAMESPACE::InvalidDrmFormatModifierPlaneLayoutEXTError(
+-        message);
++    throw VULKAN_HPP_NAMESPACE::InvalidDrmFormatModifierPlaneLayoutEXTError(message);
+   case Result::eErrorNotPermitted:
+     throw VULKAN_HPP_NAMESPACE::NotPermittedError(message);
+ #if defined(VK_USE_PLATFORM_WIN32_KHR)
+@@ -184,8 +159,7 @@ throwResultException(VULKAN_HPP_NAMESPACE::Result result, char const *message) {
+   case Result::eErrorCompressionExhaustedEXT:
+     throw VULKAN_HPP_NAMESPACE::CompressionExhaustedEXTError(message);
+   default:
+-    throw VULKAN_HPP_NAMESPACE::SystemError(
+-        VULKAN_HPP_NAMESPACE::make_error_code(result), message);
++    throw VULKAN_HPP_NAMESPACE::SystemError(VULKAN_HPP_NAMESPACE::make_error_code(result), message);
+   }
+ }
+ } // namespace VMA_HPP_NAMESPACE::detail
+@@ -227,11 +201,9 @@ createResultValueType(VULKAN_HPP_NAMESPACE::Result result, T &&data) {
+ } // namespace VMA_HPP_NAMESPACE::detail
+ 
+ namespace VMA_HPP_NAMESPACE::detail {
+-VULKAN_HPP_INLINE void 
+-resultCheck(VULKAN_HPP_NAMESPACE::Result result, char const *message) {
++VULKAN_HPP_INLINE void resultCheck(VULKAN_HPP_NAMESPACE::Result result, char const *message) {
+ #ifdef VULKAN_HPP_NO_EXCEPTIONS
+-  VMA_HPP_NAMESPACE::detail::ignore(
+-      result); // just in case VULKAN_HPP_ASSERT_ON_RESULT is empty
++  VMA_HPP_NAMESPACE::detail::ignore(result); // just in case VULKAN_HPP_ASSERT_ON_RESULT is empty
+   VMA_HPP_NAMESPACE::detail::ignore(message);
+   VULKAN_HPP_ASSERT_ON_RESULT(result == VULKAN_HPP_NAMESPACE::Result::eSuccess);
+ #else
+@@ -245,17 +217,14 @@ VULKAN_HPP_INLINE void
+ resultCheck(VULKAN_HPP_NAMESPACE::Result result, char const *message,
+             std::initializer_list<VULKAN_HPP_NAMESPACE::Result> successCodes) {
+ #ifdef VULKAN_HPP_NO_EXCEPTIONS
+-  VMA_HPP_NAMESPACE::detail::ignore(
+-      result); // just in case VULKAN_HPP_ASSERT_ON_RESULT is empty
++  VMA_HPP_NAMESPACE::detail::ignore(result); // just in case VULKAN_HPP_ASSERT_ON_RESULT is empty
+   VMA_HPP_NAMESPACE::detail::ignore(message);
+   VMA_HPP_NAMESPACE::detail::ignore(
+       successCodes); // just in case VULKAN_HPP_ASSERT_ON_RESULT is empty
+-  VULKAN_HPP_ASSERT_ON_RESULT(std::find(successCodes.begin(),
+-                                        successCodes.end(),
+-                                        result) != successCodes.end());
++  VULKAN_HPP_ASSERT_ON_RESULT(std::find(successCodes.begin(), successCodes.end(), result) !=
++                              successCodes.end());
+ #else
+-  if (std::find(successCodes.begin(), successCodes.end(), result) ==
+-      successCodes.end()) {
++  if (std::find(successCodes.begin(), successCodes.end(), result) == successCodes.end()) {
+     VMA_HPP_NAMESPACE::detail::throwResultException(result, message);
+   }
+ #endif
+@@ -273,17 +242,14 @@ resultCheck(VULKAN_HPP_NAMESPACE::Result result, char const *message,
+ namespace VMA_HPP_NAMESPACE {
+ 
+ #ifndef VULKAN_HPP_NO_SMART_HANDLE
+-#define VMA_HPP_DESTROY_IMPL(NAME)                                             \
+-  template <>                                                                  \
+-  VULKAN_HPP_INLINE void VULKAN_HPP_NAMESPACE::UniqueHandleTraits<             \
+-      NAME, Dispatcher>::deleter::destroy(const NAME &t) VULKAN_HPP_NOEXCEPT
++#define VMA_HPP_DESTROY_IMPL(NAME)                                                                 \
++  template <>                                                                                      \
++  VULKAN_HPP_INLINE void                                                                           \
++  VULKAN_HPP_NAMESPACE::UniqueHandleTraits<NAME, Dispatcher>::deleter::destroy(const NAME &t)      \
++      VULKAN_HPP_NOEXCEPT
+ 
+-VMA_HPP_DESTROY_IMPL(VULKAN_HPP_NAMESPACE::Buffer) {
+-  owner.destroyBuffer(t, nullptr);
+-}
+-VMA_HPP_DESTROY_IMPL(VULKAN_HPP_NAMESPACE::Image) {
+-  owner.destroyImage(t, nullptr);
+-}
++VMA_HPP_DESTROY_IMPL(VULKAN_HPP_NAMESPACE::Buffer) { owner.destroyBuffer(t, nullptr); }
++VMA_HPP_DESTROY_IMPL(VULKAN_HPP_NAMESPACE::Image) { owner.destroyImage(t, nullptr); }
+ VMA_HPP_DESTROY_IMPL(Pool) { owner.destroyPool(t); }
+ VMA_HPP_DESTROY_IMPL(Allocation) { owner.freeMemory(t); }
+ VMA_HPP_DESTROY_IMPL(VirtualAllocation) { owner.virtualFree(t); }
+@@ -292,9 +258,8 @@ VMA_HPP_DESTROY_IMPL(VirtualAllocation) { owner.virtualFree(t); }
+ #endif
+ 
+ template <class InstanceDispatcher, class DeviceDispatcher>
+-VULKAN_HPP_CONSTEXPR VulkanFunctions
+-functionsFromDispatcher(InstanceDispatcher const *instance,
+-                        DeviceDispatcher const *device) VULKAN_HPP_NOEXCEPT {
++VULKAN_HPP_CONSTEXPR VulkanFunctions functionsFromDispatcher(
++    InstanceDispatcher const *instance, DeviceDispatcher const *device) VULKAN_HPP_NOEXCEPT {
+   return VulkanFunctions{
+       instance->vkGetInstanceProcAddr,
+       instance->vkGetDeviceProcAddr,
+@@ -315,31 +280,26 @@ functionsFromDispatcher(InstanceDispatcher const *instance,
+       device->vkCreateImage,
+       device->vkDestroyImage,
+       device->vkCmdCopyBuffer,
+-      device->vkGetBufferMemoryRequirements2KHR
+-          ? device->vkGetBufferMemoryRequirements2KHR
+-          : device->vkGetBufferMemoryRequirements2,
+-      device->vkGetImageMemoryRequirements2KHR
+-          ? device->vkGetImageMemoryRequirements2KHR
+-          : device->vkGetImageMemoryRequirements2,
+-      device->vkBindBufferMemory2KHR ? device->vkBindBufferMemory2KHR
+-                                     : device->vkBindBufferMemory2,
+-      device->vkBindImageMemory2KHR ? device->vkBindImageMemory2KHR
+-                                    : device->vkBindImageMemory2,
++      device->vkGetBufferMemoryRequirements2KHR ? device->vkGetBufferMemoryRequirements2KHR
++                                                : device->vkGetBufferMemoryRequirements2,
++      device->vkGetImageMemoryRequirements2KHR ? device->vkGetImageMemoryRequirements2KHR
++                                               : device->vkGetImageMemoryRequirements2,
++      device->vkBindBufferMemory2KHR ? device->vkBindBufferMemory2KHR : device->vkBindBufferMemory2,
++      device->vkBindImageMemory2KHR ? device->vkBindImageMemory2KHR : device->vkBindImageMemory2,
+       instance->vkGetPhysicalDeviceMemoryProperties2KHR
+           ? instance->vkGetPhysicalDeviceMemoryProperties2KHR
+           : instance->vkGetPhysicalDeviceMemoryProperties2,
+       device->vkGetDeviceBufferMemoryRequirementsKHR
+           ? device->vkGetDeviceBufferMemoryRequirementsKHR
+           : device->vkGetDeviceBufferMemoryRequirements,
+-      device->vkGetDeviceImageMemoryRequirementsKHR
+-          ? device->vkGetDeviceImageMemoryRequirementsKHR
+-          : device->vkGetDeviceImageMemoryRequirements,
++      device->vkGetDeviceImageMemoryRequirementsKHR ? device->vkGetDeviceImageMemoryRequirementsKHR
++                                                    : device->vkGetDeviceImageMemoryRequirements,
+   };
+ }
+ 
+ template <class Dispatch = VULKAN_HPP_DEFAULT_DISPATCHER_TYPE>
+-VULKAN_HPP_CONSTEXPR VulkanFunctions
+-functionsFromDispatcher(Dispatch const &dispatch) VULKAN_HPP_NOEXCEPT {
++VULKAN_HPP_CONSTEXPR VulkanFunctions functionsFromDispatcher(Dispatch const &dispatch)
++    VULKAN_HPP_NOEXCEPT {
+   return functionsFromDispatcher(&dispatch, &dispatch);
+ }
+ } // namespace VMA_HPP_NAMESPACE
