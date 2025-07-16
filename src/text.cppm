@@ -2,13 +2,9 @@ module;
 
 #include "macros.hpp"
 #include "primitive_types.hpp"
-#include <ft2build.h>
-#include <msdf-atlas-gen.h> // Include for msdf_atlas namespace
-#include <msdfgen-ext.h>    // For Freetype integration
-#include <msdfgen.h>
-#include FT_FREETYPE_H
-
-#include <cstddef>
+#include <msdf-atlas-gen/msdf-atlas-gen.h> // Include for msdf_atlas namespace
+// #include <msdfgen-ext.h>    // For Freetype integration
+// #include <msdfgen.h>
 
 export module vulkan_app:text;
 
@@ -63,14 +59,16 @@ export struct Font {
 };
 
 /**
- * @brief Generates a Multi-channel True Signed Distance Field (MTSDF) font atlas.
- * This function uses msdf-gen to create a high-quality, resolution-independent
- * font atlas from a TTF file. The RGB channels store the MSDF, and the Alpha channel
- * stores a true SDF.
+ * @brief Generates a Multi-channel True Signed Distance Field (MTSDF) font
+ * atlas. This function uses msdf-gen to create a high-quality,
+ * resolution-independent font atlas from a TTF file. The RGB channels store the
+ * MSDF, and the Alpha channel stores a true SDF.
  *
  * @param fontPath Path to the .ttf font file.
- * @param pixelHeight The desired height of the font in pixels for metric calculations.
- * @return A FontAtlasData struct containing the MTSDF bitmap, dimensions, and glyph metrics.
+ * @param pixelHeight The desired height of the font in pixels for metric
+ * calculations.
+ * @return A FontAtlasData struct containing the MTSDF bitmap, dimensions, and
+ * glyph metrics.
  */
 export [[nodiscard]] std::expected<FontAtlasData, std::string>
 createFontAtlasMSDF(const std::string &fontPath, int pixelHeight) {
@@ -105,9 +103,9 @@ createFontAtlasMSDF(const std::string &fontPath, int pixelHeight) {
   atlasData.pxRange = atlasData.unitsPerEm / 128; // The distance field range in atlas pixels.
   // atlasData.pxRange = 2.0;
 
-  const std::string fullCharset =
-      " !\"#$%&'()*+,-./"
-      "0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
+  const std::string fullCharset = " !,."
+                                  "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                                  "abcdefghijklmnopqrstuvwxyz";
   std::string currentCharset = "Vulkan?";
   if (currentCharset.empty()) {
     currentCharset = fullCharset;
@@ -132,9 +130,10 @@ createFontAtlasMSDF(const std::string &fontPath, int pixelHeight) {
   // for (char c_char : currentCharset) {
   //   charset.add(static_cast<msdfgen::unicode_t>(c_char));
   // }
-  // double geometryScale = 1.0; // Use a scale of 1.0 for now, the packer will handle the final
-  // scale int num = fontGEometry.loadCharset(font, geometryScale, charset); auto frfr =
-  // fontGEometry.getGlyphs(); glyphs.assign(frfr.begin(), frfr.end());
+  // double geometryScale = 1.0; // Use a scale of 1.0 for now, the packer will
+  // handle the final scale int num = fontGEometry.loadCharset(font,
+  // geometryScale, charset); auto frfr = fontGEometry.getGlyphs();
+  // glyphs.assign(frfr.begin(), frfr.end());
   std::println("DEBUG: Loaded {} glyphs from font.", glyphs.size());
 
   if (glyphs.empty()) {
@@ -149,9 +148,9 @@ createFontAtlasMSDF(const std::string &fontPath, int pixelHeight) {
   // --- Atlas Packing ---
   msdf_atlas::TightAtlasPacker packer;
   packer.setPixelRange(atlasData.pxRange);
-  // Let the packer determine the scale automatically based on glyphs and pixel range
-  // Or uncomment the next line to force a specific pixel size for the EM square
-  // packer.setScale(static_cast<double>(pixelHeight));
+  // Let the packer determine the scale automatically based on glyphs and pixel
+  // range Or uncomment the next line to force a specific pixel size for the EM
+  // square packer.setScale(static_cast<double>(pixelHeight));
   packer.setMiterLimit(miterLimit);
   packer.setOuterUnitPadding(32);
   // packer.setScale(1.0);
@@ -162,14 +161,15 @@ createFontAtlasMSDF(const std::string &fontPath, int pixelHeight) {
   atlasData.atlasWidth = width;
   atlasData.atlasHeight = height;
 
-  // **NEW**: Store the scale calculated by the packer. This is crucial for correct rendering.
+  // **NEW**: Store the scale calculated by the packer. This is crucial for
+  // correct rendering.
   atlasData.atlasScale = packer.getScale();
   std::println("DEBUG: Atlas Packer Scale = {}", atlasData.atlasScale);
   std::println("DEBUG: Atlas Dimensions after packing: Width = {}, Height = {}", width, height);
   if (width <= 0 || height <= 0) {
-    return std::unexpected(std::format(
-        "MSDF-ATLAS-GEN: Failed to pack symbols. Atlas dimensions are invalid: w={}, h={}", width,
-        height));
+    return std::unexpected(std::format("MSDF-ATLAS-GEN: Failed to pack symbols. Atlas dimensions "
+                                       "are invalid: w={}, h={}",
+                                       width, height));
   }
 
   // --- Atlas Generation (Using MTSDF) ---
@@ -179,12 +179,13 @@ createFontAtlasMSDF(const std::string &fontPath, int pixelHeight) {
   attributes.scanlinePass = true;
 
   // Use the mtsdfGenerator with 4 channels (byte-based)
-  msdf_atlas::ImmediateAtlasGenerator<
-      float,                                              // Intermediate format for processing
-      4,                                                  // 4 output channels (RGBA)
-      msdf_atlas::mtsdfGenerator,                         // The generator for MSDF+SDF
-      msdf_atlas::BitmapAtlasStorage<msdf_atlas::byte, 4> // Final storage format
-      >
+  msdf_atlas::ImmediateAtlasGenerator<float, // Intermediate format for processing
+                                      4,     // 4 output channels (RGBA)
+                                      msdf_atlas::mtsdfGenerator, // The generator for MSDF+SDF
+                                      msdf_atlas::BitmapAtlasStorage<msdf_atlas::byte, 4> // Final
+                                                                                          // storage
+                                                                                          // format
+                                      >
       generator(width, height);
 
   generator.setAttributes(attributes);

@@ -79,6 +79,8 @@ export class App {
   i32 fontSizeMultiplier{0};
   TextToggles textToggles;
 
+  ImGuiMenu imguiMenu;
+
 private:
   // All initialization functions that can fail are changed to return a std::expected.
   // This allows us to propagate errors up to the main `run` function without calling std::exit.
@@ -194,13 +196,13 @@ private:
 
     auto textGraphicsPipelineResult = textPipeline.createGraphicsPipeline(
         device.logical(), pipelineCache, textShaderStages, vertexInputInfo, inputAssembly,
-        wd.renderPass, &blendAttachment, &depthStencil);
+        wd.getRenderPass(), &blendAttachment, &depthStencil);
     if (!textGraphicsPipelineResult) {
       return std::unexpected(textGraphicsPipelineResult.error());
     }
     auto uiGraphicsPipelineResult = uiPipeline.createGraphicsPipeline(
         device.logical(), pipelineCache, uiShaderStages, vertexInputInfo, inputAssembly,
-        wd.renderPass, &blendAttachment, &depthStencil);
+        wd.getRenderPass(), &blendAttachment, &depthStencil);
     if (!uiGraphicsPipelineResult) {
       return std::unexpected(uiGraphicsPipelineResult.error());
     }
@@ -247,145 +249,84 @@ private:
   }
 
   void FrameRender(ImDrawData *draw_data, f32 deltaTime) {
-    if (!*wd.swapchain) {
-      return;
-    }
-
-    auto &image_acquired_semaphore = wd.frameSemaphores[wd.semaphoreIndex].ImageAcquiredSemaphore;
-    auto &render_complete_semaphore = wd.frameSemaphores[wd.semaphoreIndex].RenderCompleteSemaphore;
-
-    auto [acquireRes, imageIndex] =
-        device.logical().acquireNextImage2KHR({.swapchain = wd.swapchain,
-                                               .timeout = UINT64_MAX,
-                                               .semaphore = image_acquired_semaphore,
-                                               .deviceMask = 1});
-    if (acquireRes == vk::Result::eErrorOutOfDateKHR || acquireRes == vk::Result::eSuboptimalKHR) {
-      swapChainRebuild = true;
-      if (acquireRes == vk::Result::eErrorOutOfDateKHR) {
-        return;
+    auto frameStatus = wd.renderFrame([&](vk::raii::CommandBuffer &cmd, vk::raii::RenderPass &rp,
+                                          vk::raii::Framebuffer &fb) {
+      // Update and draw 3D scene
+      if (threeDEngine) {
+        threeDEngine->update(wd.getImageIndex(), deltaTime, wd.getExtent());
       }
-    } else if (acquireRes != vk::Result::eSuccess) {
-      std::println("Error acquiring swapchain image: {}", vk::to_string(acquireRes));
-      return;
-    }
-    wd.frameIndex = imageIndex;
 
-    VulkanWindow::Frame &currentFrame = wd.frames[wd.frameIndex];
-    // Errors inside the render loop shouldn't terminate the app.
-    // We just log them and skip the rest of the frame rendering.
-    if (auto res = device.logical().waitForFences(*currentFrame.Fence, VK_TRUE, UINT64_MAX);
-        res != vk::Result::eSuccess) {
-      std::println("Error waiting for fence: {}", vk::to_string(res));
-      return;
-    }
-    device.logical().resetFences({*currentFrame.Fence});
+      std::array<vk::ClearValue, 2> clearValues{};
+      clearValues[0].color = wd.clearValue.color;
+      clearValues[1].depthStencil = {.depth = 1.0, .stencil = 0};
 
-    currentFrame.CommandPool.reset();
-    currentFrame.CommandBuffer.begin({.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+      cmd.beginRenderPass({.renderPass = rp,
+                           .framebuffer = fb,
+                           .renderArea = {.offset = {.x = 0, .y = 0}, .extent = wd.getExtent()},
+                           .clearValueCount = static_cast<u32>(clearValues.size()),
+                           .pClearValues = clearValues.data()},
+                          vk::SubpassContents::eInline);
+      cmd.setViewport(0, vk::Viewport{.x = 0.0,
+                                      .y = 0.0,
+                                      .width = static_cast<f32>(wd.getExtent().width),
+                                      .height = static_cast<f32>(wd.getExtent().height),
+                                      .minDepth = 0.0,
+                                      .maxDepth = 1.0});
+      cmd.setScissor(0, vk::Rect2D{.offset = {.x = 0, .y = 0}, .extent = wd.getExtent()});
 
-    // Update and draw 3D scene
-    if (threeDEngine) {
-      threeDEngine->update(wd.frameIndex, deltaTime, wd.swapchainExtent);
-    }
+      if (threeDEngine) {
+        threeDEngine->draw(cmd, wd.getImageIndex());
+      }
 
-    std::array<vk::ClearValue, 2> clearValues{};
-    clearValues[0].color = wd.clearValue.color;
-    clearValues[1].depthStencil = {.depth = 1.0, .stencil = 0};
+      // Prepare and draw 2D elements
+      textSystem.beginFrame();
+      uiSystem.beginFrame();
+      RenderQueue renderQueue;
 
-    currentFrame.CommandBuffer.beginRenderPass(
-        {.renderPass = *wd.renderPass,
-         .framebuffer = *currentFrame.Framebuffer,
-         .renderArea = {.offset = {.x = 0, .y = 0}, .extent = wd.swapchainExtent},
-         .clearValueCount = static_cast<u32>(clearValues.size()),
-         .pClearValues = clearValues.data()},
-        vk::SubpassContents::eInline);
-    currentFrame.CommandBuffer.setViewport(
-        0, vk::Viewport{.x = 0.0,
-                        .y = 0.0,
-                        .width = static_cast<f32>(wd.swapchainExtent.width),
-                        .height = static_cast<f32>(wd.swapchainExtent.height),
-                        .minDepth = 0.0,
-                        .maxDepth = 1.0});
-    currentFrame.CommandBuffer.setScissor(
-        0, vk::Rect2D{.offset = {.x = 0, .y = 0}, .extent = wd.swapchainExtent});
+      if (textView) {
+        textView->setDimensions(5000.0, 3000.0);
+        usize firstLine = textView->getFirstVisibleLine();
+        usize numLines = textView->getVisibleLineCount();
+        usize lastLine = std::min(firstLine + numLines, textEditor.lineCount());
+        f32 currentLineYpos = 100.0;
 
-    if (threeDEngine) {
-      threeDEngine->draw(currentFrame.CommandBuffer, wd.frameIndex);
-    }
-
-    // Prepare and draw 2D elements
-    textSystem.beginFrame();
-    uiSystem.beginFrame();
-    RenderQueue renderQueue;
-
-    if (textView) {
-      textView->setDimensions(5000.0, 3000.0);
-      usize firstLine = textView->getFirstVisibleLine();
-      usize numLines = textView->getVisibleLineCount();
-      usize lastLine = std::min(firstLine + numLines, textEditor.lineCount());
-      f32 currentLineYpos = 100.0;
-
-      if (!registeredFonts.empty()) {
-        for (usize i = firstLine; i < lastLine; ++i) {
-          textSystem.queueText(registeredFonts[0], textEditor.getLine(i), textView->fontPointSize,
-                               200.0, currentLineYpos, {1.0, 1.0, 1.0, 1.0});
-          const f64 pointSize = 36.0;
-          const f64 fontUnitToPixelScale =
-              pointSize * (96.0 / 72.0 * 2) / registeredFonts[0]->atlasData.unitsPerEm;
-          const f64 line_height_px =
-              registeredFonts[0]->atlasData.lineHeight * fontUnitToPixelScale;
-          currentLineYpos += (line_height_px > 0) ? static_cast<f32>(line_height_px) : 38.0;
+        if (!registeredFonts.empty()) {
+          for (usize i = firstLine; i < lastLine; ++i) {
+            textSystem.queueText(registeredFonts[0], textEditor.getLine(i), textView->fontPointSize,
+                                 200.0, currentLineYpos, {1.0, 1.0, 1.0, 1.0});
+            const f64 pointSize = 36.0;
+            const f64 fontUnitToPixelScale =
+                pointSize * (96.0 / 72.0 * 2) / registeredFonts[0]->atlasData.unitsPerEm;
+            const f64 line_height_px =
+                registeredFonts[0]->atlasData.lineHeight * fontUnitToPixelScale;
+            currentLineYpos += (line_height_px > 0) ? static_cast<f32>(line_height_px) : 38.0;
+          }
         }
       }
-    }
 
-    uiSystem.queueQuad({.position = {200, 200},
-                        .size = {300, 300},
-                        .color = {0.0, 1.0, 0.0, 1.0},
-                        .z_layer = 0.0});
-    uiSystem.queueQuad({.position = {1000, 200},
-                        .size = {100, 300},
-                        .color = {0.0, 0.0, 1.0, 1.0},
-                        .z_layer = 0.0});
+      uiSystem.queueQuad({.position = {200, 200},
+                          .size = {300, 300},
+                          .color = {0.0, 1.0, 0.0, 1.0},
+                          .z_layer = 0.0});
+      uiSystem.queueQuad({.position = {1000, 200},
+                          .size = {100, 300},
+                          .color = {0.0, 0.0, 1.0, 1.0},
+                          .z_layer = 0.0});
 
-    textSystem.prepareBatches(renderQueue, textPipeline, wd.frameIndex, wd.swapchainExtent,
-                              textToggles);
-    uiSystem.prepareBatches(renderQueue, uiPipeline, wd.frameIndex, wd.swapchainExtent);
-    processRenderQueue(currentFrame.CommandBuffer, renderQueue);
+      textSystem.prepareBatches(renderQueue, textPipeline, wd.getImageIndex(), wd.getExtent(),
+                                textToggles);
+      uiSystem.prepareBatches(renderQueue, uiPipeline, wd.getImageIndex(), wd.getExtent());
+      processRenderQueue(cmd, renderQueue);
 
-    ImGui_ImplVulkan_RenderDrawData(draw_data, *currentFrame.CommandBuffer);
-    currentFrame.CommandBuffer.endRenderPass();
-    currentFrame.CommandBuffer.end();
+      ImGui_ImplVulkan_RenderDrawData(draw_data, *cmd);
+      cmd.endRenderPass();
+    });
 
-    vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-    vk::SubmitInfo submitInfo{.waitSemaphoreCount = 1,
-                              .pWaitSemaphores = &*image_acquired_semaphore,
-                              .pWaitDstStageMask = &waitStage,
-                              .commandBufferCount = 1,
-                              .pCommandBuffers = &*currentFrame.CommandBuffer,
-                              .signalSemaphoreCount = 1,
-                              .pSignalSemaphores = &*render_complete_semaphore};
-    device.queue_.submit({submitInfo}, *currentFrame.Fence);
-  }
-
-  void FramePresent() {
-    if (swapChainRebuild || !*wd.swapchain) {
-      return;
-    }
-    auto &render_complete_semaphore = wd.frameSemaphores[wd.semaphoreIndex].RenderCompleteSemaphore;
-    vk::PresentInfoKHR presentInfo{.waitSemaphoreCount = 1,
-                                   .pWaitSemaphores = &*render_complete_semaphore,
-                                   .swapchainCount = 1,
-                                   .pSwapchains = &*wd.swapchain,
-                                   .pImageIndices = &wd.frameIndex};
-    vk::Result presentResult = device.queue_.presentKHR(presentInfo);
-    if (presentResult == vk::Result::eErrorOutOfDateKHR ||
-        presentResult == vk::Result::eSuboptimalKHR) {
+    if (frameStatus == VulkanWindow::FrameStatus::ResizeNeeded) {
       swapChainRebuild = true;
-    } else if (presentResult != vk::Result::eSuccess) {
-      std::println("Error presenting swapchain image: {}", vk::to_string(presentResult));
+    } else if (frameStatus == VulkanWindow::FrameStatus::Error) {
+      std::println("Error during frame rendering.");
     }
-    wd.semaphoreIndex = (wd.semaphoreIndex + 1) % wd.frameSemaphores.size();
   }
 
   static vk::Extent2D get_window_size(SDL_Window *window) {
@@ -430,6 +371,7 @@ private:
   void mainLoop(SDL_Window *sdl_window) {
     ImGuiIO &imguiIO = ImGui::GetIO();
     imguiIO.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    // imguiIO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     using Clock = std::chrono::high_resolution_clock;
     auto previousTime = Clock::now();
     f32 deltaTime = 0.0;
@@ -504,7 +446,11 @@ private:
 
       if (swapChainRebuild) {
         device.logical().waitIdle();
-        wd.createOrResize(currentExtent, MIN_IMAGE_COUNT);
+        if (auto exp = wd.createOrResize(currentExtent, MIN_IMAGE_COUNT); !exp) {
+          std::println("Failed to recreate swapchain: {}", exp.error());
+          // Handle this error more gracefully, perhaps by attempting to reinitialize or exit.
+          done = true; // For now, we'll exit.
+        }
         if (threeDEngine) {
           threeDEngine->onSwapchainRecreated(wd.getImageCount());
         }
@@ -515,18 +461,13 @@ private:
       ImGui_ImplSDL3_NewFrame();
       ImGui::NewFrame();
 
-      if (threeDEngine) {
-        RenderCameraControlMenu(threeDEngine->getCamera());
-        RenderLightControlMenu(threeDEngine->getLightUbo());
-        RenderShaderTogglesMenu(threeDEngine->getShaderToggles());
-        RenderSceneHierarchyMaterialEditor(threeDEngine->getScene(), wd.frameIndex);
-      }
-      RenderVulkanStateWindow(device, wd, 120, deltaTime);
-      RenderTextMenu(fontSizeMultiplier, textToggles);
+      imguiMenu.renderMegaMenu(imguiMenu, wd, device, threeDEngine->getCamera(),
+                               threeDEngine->getScene(), textSystem,
+                               threeDEngine->getShaderToggles(), threeDEngine->getLightUbo(),
+                               textToggles, fontSizeMultiplier, wd.getCurrentFrame(), deltaTime);
 
       ImGui::Render();
       FrameRender(ImGui::GetDrawData(), deltaTime);
-      FramePresent();
     }
   }
 
@@ -557,7 +498,7 @@ public:
     // Initialize Engines
     threeDEngine = std::make_unique<ThreeDEngine>(device, wd.getImageCount(), thread_pool);
     // Assume threeDEngine->initialize also returns std::expected
-    if (auto res = threeDEngine->initialize(wd.renderPass, pipelineCache); !res) {
+    if (auto res = threeDEngine->initialize(wd.getRenderPass(), pipelineCache); !res) {
       std::println("3D engine initialization failed: {}", res.error());
       return 1;
     }
@@ -601,7 +542,8 @@ public:
                                                          .pBindings = textBindings.data()};
         textSetLayout = device.logical().createDescriptorSetLayout(textLayoutInfo).value();
         return textSystem.registerFont(
-            "../assets/fonts/Inconsolata/InconsolataNerdFontMono-Regular.ttf", 64, textSetLayout);
+            "../../assets/fonts/Inconsolata/InconsolataNerdFontMono-Regular.ttf", 64,
+            textSetLayout);
       }));
     }
 
@@ -612,13 +554,13 @@ public:
     ImGui_ImplSDL3_InitForVulkan(sdl_window);
     ImGui_ImplVulkan_InitInfo init_info = device.init_info();
     init_info.Instance = instance.get_C_handle();
-    init_info.RenderPass = *wd.renderPass;
+    init_info.RenderPass = *wd.getRenderPass();
     init_info.MinImageCount = MIN_IMAGE_COUNT;
     init_info.ImageCount = static_cast<u32>(wd.getImageCount());
     init_info.PipelineCache = *pipelineCache;
     init_info.CheckVkResultFn = check_vk_result_for_imgui;
     ImGui_ImplVulkan_Init(&init_info);
-    ImGui_ImplVulkan_CreateFontsTexture();
+    // ImGui_ImplVulkan_CreateFontsTexture();
 
     mainLoop(sdl_window);
 

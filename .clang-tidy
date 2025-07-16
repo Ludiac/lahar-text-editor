@@ -1,0 +1,74 @@
+---
+Checks: >
+  -*,
+  bugprone-*,
+  cppcoreguidelines-*,
+  modernize-*,
+  performance-*,
+  readability-*,
+  -readability-identifier-naming # We'll configure this specifically
+  -readability-function-cognitive-complexity,
+  -readability-else-after-return,
+  -modernize-use-trailing-return-type,
+  -cppcoreguidelines-non-private-member-variables-in-classes,
+
+CheckOptions:
+  # Naming Conventions (readability-identifier-naming)
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase # LLVM: UpperCamelCase for types
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase # LLVM: UpperCamelCase for types
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase # LLVM: UpperCamelCase for enums
+  - key: readability-identifier-naming.FunctionCase
+    value: camelBack # LLVM: camelBack for non-member functions
+  - key: readability-identifier-naming.MemberCase
+    value: camelBack # LLVM: m_camelBack (prefix handled separately)
+  - key: readability-identifier-naming.ConstantCase
+    value: UPPER_CASE # LLVM: ALL_CAPS_WITH_UNDERSCORES for general constants
+  - key: readability-identifier-naming.ConstantMemberCase
+    value: UPPER_CASE # LLVM: ALL_CAPS_WITH_UNDERSCORES for member constants (assuming they mean static const/defines)
+  - key: readability-identifier-naming.VariableCase
+    value: camelBack # LLVM: camelBack
+  - key: readability-identifier-naming.ParameterCase
+    value: camelBack # LLVM: camelBack
+  - key: readability-identifier-naming.LocalVariableCase
+    value: camelBack # LLVM: camelBack
+  - key: readability-identifier-naming.GlobalVariableCase
+    value: camelBack # LLVM: g_camelBack (prefix handled separately)
+  - key: readability-identifier-naming.FunctionParameterCase
+    value: camelBack # LLVM: camelBack
+  - key: readability-identifier-naming.PrivateMemberPrefix
+    value: m_ # LLVM: Explicitly uses 'm_' prefix for member variables
+  - key: readability-identifier-naming.StaticConstantCase
+    value: UPPER_CASE # LLVM: ALL_CAPS_WITH_UNDERSCORES for static constants (prefix 's_' for static vars)
+  - key: readability-identifier-naming.PublicMemberCase
+    value: camelBack # LLVM: Members are generally m_camelBack. Public members would still be camelBack for the name part.
+  - key: readability-identifier-naming.EnumConstantCase
+    value: CamelCase # LLVM: UpperCamelCase for enum constants
+
+  # Modernize checks - enable all of them
+  - key: modernize-loop-convert.AllowRangeBasedForLoop
+    value: true
+  - key: modernize-use-nullptr.Enabled
+    value: true
+  - key: modernize-use-override.Enabled
+    value: true
+  - key: modernize-use-auto.Enabled
+    value: true
+  - key: modernize-pass-by-value.Enabled
+    value: true
+
+  # Other common modern practices
+  - key: cppcoreguidelines-pro-type-member-init.Enabled
+    value: true # Enforce member initialization
+  - key: bugprone-macro-parentheses.Enabled
+    value: true # Macros should use parentheses
+  - key: performance-unnecessary-value-param.Enabled
+    value: true # Pass small types by value, larger by const reference
+  - key: readability-else-after-return.Enabled
+    value: true # Avoid redundant else after return/throw/continue
+
+HeaderFilterRegex: '^.*[/\\]src[/\\]'
+FormatStyle: file # Use the .clang-format in the directory for indentation
+...

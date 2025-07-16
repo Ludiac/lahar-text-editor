@@ -19,7 +19,7 @@ include(${CMAKE_CURRENT_BINARY_DIR}/cmake/CPM.cmake)
 CPMAddPackage(
   NAME imgui
   GITHUB_REPOSITORY ocornut/imgui
-  GIT_TAG v1.91.8 # Consider using the latest release or a specific commit
+  GIT_TAG docking
   DOWNLOAD_ONLY YES # imgui is added as source files directly
 )
 
@@ -36,43 +36,28 @@ CPMAddPackage(
     PATCHES ${CMAKE_CURRENT_SOURCE_DIR}/patches/bsThread_pool.patch
 )
 
-CPMAddPackage(
-    NAME freeType
-    GITHUB_REPOSITORY freetype/freetype
-    GIT_TAG 1529bc6
-)
+# CPMAddPackage(
+#     NAME msdfgen
+#     GITHUB_REPOSITORY Chlumsky/msdfgen
+#     GIT_TAG 0388956
+#     OPTIONS
+#         "MSDFGEN_CORE_ONLY OFF"
+#         "MSDFGEN_BUILD_STANDALONE OFF" # Explicitly disable CLI build
+#         "MSDFGEN_USE_VCPKG OFF"       # Explicitly disable Vcpkg
+#         "MSDFGEN_DISABLE_SVG ON"      # Explicitly disable SVG (and thus tinyxml2)
+#         "MSDFGEN_DISABLE_PNG ON"      # Explicitly disable PNG if not needed
+#         "MSDFGEN_USE_SKIA OFF"        # Explicitly disable Skia if not needed
+# )
 
-if (TARGET freetype AND NOT TARGET Freetype::Freetype)
-    add_library(Freetype::Freetype ALIAS freetype)
-endif()
-
-CPMAddPackage(
-    NAME msdfgen
-    GITHUB_REPOSITORY Chlumsky/msdfgen
-    GIT_TAG 0388956
-    OPTIONS
-    "MSDFGEN_CORE_ONLY OFF"
-        "MSDFGEN_BUILD_STANDALONE OFF" # Explicitly disable CLI build
-        "MSDFGEN_USE_VCPKG OFF"       # Explicitly disable Vcpkg
-        "MSDFGEN_DISABLE_SVG ON"      # Explicitly disable SVG (and thus tinyxml2)
-        "MSDFGEN_DISABLE_PNG ON"      # Explicitly disable PNG if not needed
-        "MSDFGEN_USE_SKIA OFF"        # Explicitly disable Skia if not needed
-)
 
 CPMAddPackage(
     NAME msdfAtlasGen
     GITHUB_REPOSITORY Chlumsky/msdf-atlas-gen
     GIT_TAG 30b6f4f
     OPTIONS
-    "MSDFGEN_CORE_ONLY OFF"
-        "MSDFGEN_BUILD_STANDALONE OFF" # Explicitly disable CLI build
-        "MSDFGEN_USE_VCPKG OFF"       # Explicitly disable Vcpkg
-        "MSDFGEN_DISABLE_SVG ON"      # Explicitly disable SVG (and thus tinyxml2)
-        "MSDFGEN_DISABLE_PNG ON"      # Explicitly disable PNG if not needed
-        "MSDFGEN_USE_SKIA OFF"        # Explicitly disable Skia if not needed
         "MSDF_ATLAS_BUILD_STANDALONE OFF"
         "MSDF_ATLAS_USE_VCPKG OFF"
-        "MSDF_ATLAS_MSDFGEN_EXTERNAL ON"       
+        "MSDF_ATLAS_MSDFGEN_EXTERNAL OFF"       
         "MSDF_ATLAS_USE_SKIA OFF"
         "MSDF_ATLAS_NO_ARTERY_FONT OFF"
 )
@@ -115,11 +100,6 @@ target_compile_definitions(AppModule PRIVATE
     SDL_MAIN_HANDLED
     BS_THREAD_POOL_IMPORT_STD
     XXHASH_BUILD_XXHSUM OFF
-    # DMSDFGEN_BUILD_STANDALONE OFF # Disable CLI
-    # DMSDFGEN_USE_VCPKG OFF      # Crucial: Disable Vcpkg check
-    # DMSDFGEN_DISABLE_SVG ON     # Disable SVG to remove tinyxml2 dependency
-    # DMSDFGEN_DISABLE_PNG ON     # Disable PNG if not needed
-    # DMSDFGEN_USE_SKIA OFF       # Disable Skia if not needed
     BUILD_SHARED_LIBS OFF
     "$<IF:$<CONFIG:Debug>,ENABLE_VALIDATION=1,ENABLE_VALIDATION=0>"
 )
@@ -155,7 +135,6 @@ target_sources(AppModule
         src/text.cppm
         src/UISystem.cppm
         src/TextSystem.cppm
-        # src/PieceTable.cppm
         src/TextEditor.cppm
         src/TextView.cppm
         src/3DEngine.cppm
@@ -184,20 +163,18 @@ target_sources(AppModule
 target_include_directories(AppModule PRIVATE
   ${imgui_SOURCE_DIR}
   ${imgui_SOURCE_DIR}/backends
-  ${freeType_SOURCE_DIR}/include
   ${tinygltf_SOURCE_DIR}
   ${SDL3_INCLUDE_DIRS}
   ${VulkanMemoryAllocatorHpp_SOURCE_DIR}/VulkanMemoryAllocator/include
   ${VulkanMemoryAllocatorHpp_SOURCE_DIR}/include
   ${bsThreadPool_SOURCE_DIR}/include
   ${msdfgen_SOURCE_DIR}
-  ${msdfAtlasGen_SOURCE_DIR}/msdf-atlas-gen
+  ${msdfAtlasGen_SOURCE_DIR}
 )
 
 target_link_libraries(AppModule PRIVATE
-    Freetype::Freetype
-    msdfgen::msdfgen-core
-    msdfgen::msdfgen-ext
+    # msdfgen::msdfgen-core
+    # msdfgen::msdfgen-ext
     msdf-atlas-gen::msdf-atlas-gen
     SDL3::SDL3
     Vulkan::Vulkan
