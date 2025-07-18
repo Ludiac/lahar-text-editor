@@ -33,7 +33,7 @@ private:
   struct HistoryState {
     PieceList pieces;
     size_t length;
-    std::vector<size_t> line_starts; // Also save the line cache
+    std::vector<size_t> lineStarts; // Also save the line cache
   };
 
 public:
@@ -41,14 +41,13 @@ public:
    * @brief Constructs a TextEditor with initial content.
    * @param initial_content The starting text for the editor.
    */
-  explicit TextEditor(std::string_view initial_content = "") {
+  explicit TextEditor(std::string_view initial_content = "") : m_length(initial_content.length()) {
     m_original_buffer = std::make_unique<std::string>(initial_content);
     m_add_buffer = std::make_unique<std::string>();
 
-    Piece initial_piece = {
+    Piece initialPiece = {
         .buffer = BufferType::ORIGINAL, .start = 0, .length = m_original_buffer->length()};
-    m_pieces.push_back(initial_piece);
-    m_length = initial_content.length();
+    m_pieces.push_back(initialPiece);
 
     rebuildLineCache(); // Initial line calculation
     saveStateForUndo();
@@ -68,28 +67,28 @@ public:
     saveStateForUndo();
 
     // 1. Add the new text to the 'add' buffer
-    size_t added_start = m_add_buffer->length();
+    size_t addedStart = m_add_buffer->length();
     m_add_buffer->append(text);
-    Piece new_piece = {.buffer = BufferType::ADD, .start = added_start, .length = text.length()};
+    Piece newPiece = {.buffer = BufferType::ADD, .start = addedStart, .length = text.length()};
 
     // 2. Find the piece where the insertion occurs
     auto [iter, offset] = findPiece(pos);
 
     // 3. Insert the new piece and split the existing piece if necessary
     if (offset == 0) { // Insert at the start of a piece
-      m_pieces.insert(iter, new_piece);
+      m_pieces.insert(iter, newPiece);
     } else if (offset == iter->length) { // Insert at the end of a piece
-      m_pieces.insert(std::next(iter), new_piece);
+      m_pieces.insert(std::next(iter), newPiece);
     } else { // Insert in the middle, requiring a split
-      Piece &current_piece = *iter;
-      Piece right_part = {.buffer = current_piece.buffer,
-                          .start = current_piece.start + offset,
-                          .length = current_piece.length - offset};
-      current_piece.length = offset; // This is now the left part
+      Piece &currentPiece = *iter;
+      Piece rightPart = {.buffer = currentPiece.buffer,
+                         .start = currentPiece.start + offset,
+                         .length = currentPiece.length - offset};
+      currentPiece.length = offset; // This is now the left part
 
-      auto next_iter = std::next(iter);
-      next_iter = m_pieces.insert(next_iter, new_piece);
-      m_pieces.insert(next_iter, right_part);
+      auto nextIter = std::next(iter);
+      nextIter = m_pieces.insert(nextIter, newPiece);
+      m_pieces.insert(nextIter, rightPart);
     }
 
     m_length += text.length();
@@ -109,34 +108,34 @@ public:
     }
     saveStateForUndo();
 
-    size_t end_pos = pos + length;
+    size_t endPos = pos + length;
     auto [start_iter, start_offset] = findPiece(pos);
-    auto [end_iter, end_offset] = findPiece(end_pos);
+    auto [end_iter, end_offset] = findPiece(endPos);
 
     // 1. OPTIMIZATION: Incrementally update line cache BEFORE deleting pieces
     updateLineCacheForDelete(pos, length);
 
     // 2. Trim or split the boundary pieces and erase the middle pieces
-    auto first_affected = start_iter;
-    auto last_affected = end_iter;
+    auto firstAffected = start_iter;
+    auto lastAffected = end_iter;
 
     if (start_iter == end_iter) { // Deletion within a single piece
       if (start_offset == 0 && end_offset == start_iter->length) {
         // Deleting the whole piece
-        first_affected = m_pieces.erase(start_iter);
+        firstAffected = m_pieces.erase(start_iter);
       } else {
         // Split the piece into two parts (left and right of the deleted section)
         Piece &p = *start_iter;
-        Piece right_part = {
+        Piece rightPart = {
             .buffer = p.buffer, .start = p.start + end_offset, .length = p.length - end_offset};
         p.length = start_offset; // Left part
         if (p.length == 0) {
-          first_affected = m_pieces.erase(start_iter);
+          firstAffected = m_pieces.erase(start_iter);
         } else {
-          first_affected = std::next(start_iter);
+          firstAffected = std::next(start_iter);
         }
-        if (right_part.length > 0) {
-          m_pieces.insert(first_affected, right_part);
+        if (rightPart.length > 0) {
+          m_pieces.insert(firstAffected, rightPart);
         }
       }
     } else {
@@ -190,22 +189,22 @@ public:
    * @param line_index The zero-based index of the line to retrieve.
    * @return The text of the line, without the newline character.
    */
-  [[nodiscard]] std::string getLine(size_t line_index) const {
-    if (line_index >= m_line_starts.size()) {
+  [[nodiscard]] std::string getLine(size_t lineIndex) const {
+    if (lineIndex >= m_line_starts.size()) {
       return "";
     }
 
-    size_t start_pos = m_line_starts[line_index];
-    size_t end_pos =
-        (line_index + 1 < m_line_starts.size()) ? m_line_starts[line_index + 1] : m_length;
+    size_t startPos = m_line_starts[lineIndex];
+    size_t endPos =
+        (lineIndex + 1 < m_line_starts.size()) ? m_line_starts[lineIndex + 1] : m_length;
 
     // The length of the line content, excluding the potential newline char
-    size_t length = end_pos - start_pos;
-    if (length > 0 && charAt(end_pos - 1) == '\n') {
+    size_t length = endPos - startPos;
+    if (length > 0 && charAt(endPos - 1) == '\n') {
       length--;
     }
 
-    return getTextInRange(start_pos, length);
+    return getTextInRange(startPos, length);
   }
 
   /**
@@ -214,17 +213,17 @@ public:
    * @param num_lines The number of lines to retrieve.
    * @return A vector of strings, one for each visible line.
    */
-  [[nodiscard]] std::vector<std::string> getVisibleLines(size_t first_visible_line,
-                                                         size_t num_lines) const {
+  [[nodiscard]] std::vector<std::string> getVisibleLines(size_t firstVisibleLine,
+                                                         size_t numLines) const {
     std::vector<std::string> lines;
     if (m_line_starts.empty()) {
       return lines;
     }
 
-    size_t end_line = std::min(first_visible_line + num_lines, m_line_starts.size());
-    lines.reserve(end_line - first_visible_line);
+    size_t endLine = std::min(firstVisibleLine + numLines, m_line_starts.size());
+    lines.reserve(endLine - firstVisibleLine);
 
-    for (size_t i = first_visible_line; i < end_line; ++i) {
+    for (size_t i = firstVisibleLine; i < endLine; ++i) {
       lines.push_back(getLine(i));
     }
     return lines;
@@ -246,26 +245,26 @@ private:
    * @brief Finds the piece and offset corresponding to a character position.
    */
   std::pair<PieceList::iterator, size_t> findPiece(size_t pos) {
-    size_t current_pos = 0;
+    size_t currentPos = 0;
     for (auto it = m_pieces.begin(); it != m_pieces.end(); ++it) {
-      if (current_pos + it->length >= pos) {
+      if (currentPos + it->length >= pos) {
         // Returns a mutable iterator
-        return {it, pos - current_pos};
+        return {it, pos - currentPos};
       }
-      current_pos += it->length;
+      currentPos += it->length;
     }
     return {m_pieces.end(), 0};
   }
 
   // Const version for use in methods like charAt() or toString()
   [[nodiscard]] std::pair<PieceList::const_iterator, size_t> findPiece(size_t pos) const {
-    size_t current_pos = 0;
+    size_t currentPos = 0;
     for (auto it = m_pieces.cbegin(); it != m_pieces.cend(); ++it) {
-      if (current_pos + it->length >= pos) {
+      if (currentPos + it->length >= pos) {
         // Returns a read-only iterator
-        return {it, pos - current_pos};
+        return {it, pos - currentPos};
       }
-      current_pos += it->length;
+      currentPos += it->length;
     }
     return {m_pieces.cend(), 0};
   }
@@ -278,18 +277,18 @@ private:
     m_line_starts.clear();
     m_line_starts.push_back(0); // Line 0 always starts at position 0
 
-    size_t current_pos = 0;
+    size_t currentPos = 0;
     for (const auto &piece : m_pieces) {
       const std::string *buffer =
           (piece.buffer == BufferType::ORIGINAL) ? m_original_buffer.get() : m_add_buffer.get();
       for (size_t i = 0; i < piece.length; ++i) {
         if ((*buffer)[piece.start + i] == '\n') {
-          if (current_pos + i + 1 < m_length) {
-            m_line_starts.push_back(current_pos + i + 1);
+          if (currentPos + i + 1 < m_length) {
+            m_line_starts.push_back(currentPos + i + 1);
           }
         }
       }
-      current_pos += piece.length;
+      currentPos += piece.length;
     }
   }
 
@@ -298,28 +297,28 @@ private:
    */
   void updateLineCacheForInsert(size_t pos, std::string_view text) {
     // Find which line the insertion happened on
-    auto it = std::upper_bound(m_line_starts.begin(), m_line_starts.end(), pos);
-    size_t line_index = std::distance(m_line_starts.begin(), it) - 1;
+    auto it = std::ranges::upper_bound(m_line_starts, pos);
+    size_t lineIndex = std::distance(m_line_starts.begin(), it) - 1;
 
     // Shift all subsequent line starts
-    for (size_t i = line_index + 1; i < m_line_starts.size(); ++i) {
+    for (size_t i = lineIndex + 1; i < m_line_starts.size(); ++i) {
       m_line_starts[i] += text.length();
     }
 
     // Find new newlines in the inserted text
-    std::vector<size_t> new_lines_in_insert;
+    std::vector<size_t> newLinesInInsert;
     for (size_t i = 0; i < text.length(); ++i) {
       if (text[i] == '\n') {
         if (pos + i + 1 < m_length) {
-          new_lines_in_insert.push_back(pos + i + 1);
+          newLinesInInsert.push_back(pos + i + 1);
         }
       }
     }
 
     // Insert new line starts into the cache
-    if (!new_lines_in_insert.empty()) {
-      m_line_starts.insert(m_line_starts.begin() + line_index + 1, new_lines_in_insert.begin(),
-                           new_lines_in_insert.end());
+    if (!newLinesInInsert.empty()) {
+      m_line_starts.insert(m_line_starts.begin() + lineIndex + 1, newLinesInInsert.begin(),
+                           newLinesInInsert.end());
     }
   }
 
@@ -328,19 +327,19 @@ private:
    */
   void updateLineCacheForDelete(size_t pos, size_t length) {
     // Find the start and end lines affected by the deletion
-    auto start_it = std::upper_bound(m_line_starts.begin(), m_line_starts.end(), pos) - 1;
-    auto end_it = std::upper_bound(m_line_starts.begin(), m_line_starts.end(), pos + length) - 1;
+    auto startIt = std::ranges::upper_bound(m_line_starts, pos) - 1;
+    auto endIt = std::ranges::upper_bound(m_line_starts, pos + length) - 1;
 
-    size_t first_line_idx = std::distance(m_line_starts.begin(), start_it);
-    size_t last_line_idx = std::distance(m_line_starts.begin(), end_it);
+    size_t firstLineIdx = std::distance(m_line_starts.begin(), startIt);
+    size_t lastLineIdx = std::distance(m_line_starts.begin(), endIt);
 
     // Remove line starts that were inside the deleted range
-    if (last_line_idx > first_line_idx) {
-      m_line_starts.erase(start_it + 1, end_it + 1);
+    if (lastLineIdx > firstLineIdx) {
+      m_line_starts.erase(startIt + 1, endIt + 1);
     }
 
     // Shift all subsequent line starts
-    for (size_t i = first_line_idx + 1; i < m_line_starts.size(); ++i) {
+    for (size_t i = firstLineIdx + 1; i < m_line_starts.size(); ++i) {
       m_line_starts[i] -= length;
     }
   }
@@ -348,7 +347,7 @@ private:
   /**
    * @brief Retrieves a substring of the document.
    */
-  std::string getTextInRange(size_t pos, size_t length) const {
+  [[nodiscard]] std::string getTextInRange(size_t pos, size_t length) const {
     if (pos + length > m_length) {
       length = m_length - pos;
     }
@@ -356,26 +355,26 @@ private:
     std::string result;
     result.reserve(length);
 
-    size_t current_pos = 0;
+    size_t currentPos = 0;
     for (const auto &piece : m_pieces) {
       if (result.length() == length) {
         break;
       }
 
-      size_t piece_end_pos = current_pos + piece.length;
+      size_t pieceEndPos = currentPos + piece.length;
 
       // Check if this piece overlaps with the requested range
-      if (pos < piece_end_pos && current_pos < pos + length) {
-        size_t copy_start_in_piece = (pos > current_pos) ? (pos - current_pos) : 0;
-        size_t copy_end_in_piece =
-            (pos + length < piece_end_pos) ? (pos + length - current_pos) : piece.length;
-        size_t copy_len = copy_end_in_piece - copy_start_in_piece;
+      if (pos < pieceEndPos && currentPos < pos + length) {
+        size_t copyStartInPiece = (pos > currentPos) ? (pos - currentPos) : 0;
+        size_t copyEndInPiece =
+            (pos + length < pieceEndPos) ? (pos + length - currentPos) : piece.length;
+        size_t copyLen = copyEndInPiece - copyStartInPiece;
 
         const std::string *buffer =
             (piece.buffer == BufferType::ORIGINAL) ? m_original_buffer.get() : m_add_buffer.get();
-        result.append(buffer->data() + piece.start + copy_start_in_piece, copy_len);
+        result.append(buffer->data() + piece.start + copyStartInPiece, copyLen);
       }
-      current_pos += piece.length;
+      currentPos += piece.length;
     }
     return result;
   }
@@ -383,7 +382,7 @@ private:
   /**
    * @brief Gets the character at a specific position.
    */
-  char charAt(size_t pos) const {
+  [[nodiscard]] char charAt(size_t pos) const {
     if (pos >= m_length) {
       return '\0';
     }
@@ -404,7 +403,7 @@ private:
   void restoreState(const HistoryState &state) {
     m_pieces = state.pieces;
     m_length = state.length;
-    m_line_starts = state.line_starts;
+    m_line_starts = state.lineStarts;
   }
 
   // --- Member Variables ---

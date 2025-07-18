@@ -23,32 +23,32 @@ export struct UIPushConstants2D {
 // It no longer issues draw calls itself.
 export class UISystem {
 private:
-  VulkanDevice *device{};
-  u32 frameCount{0};
-  u32 maxQuadsPerFrame{2048};
-  std::vector<VmaBuffer> instanceBuffers;
-  std::vector<UIInstanceData> queuedInstances; // All UI instances for the current frame
-  VmaBuffer staticVertexBuffer;
-  VmaBuffer staticIndexBuffer;
-  vk::raii::DescriptorSetLayout instanceDataLayout{nullptr};
-  std::vector<vk::raii::DescriptorSet> instanceDataDescriptorSets;
+  VulkanDevice *m_device{};
+  u32 m_frameCount{0};
+  u32 m_maxQuadsPerFrame{2048};
+  std::vector<VmaBuffer> m_instanceBuffers;
+  std::vector<UIInstanceData> m_queuedInstances; // All UI instances for the current frame
+  VmaBuffer m_staticVertexBuffer;
+  VmaBuffer m_staticIndexBuffer;
+  vk::raii::DescriptorSetLayout m_instanceDataLayout{nullptr};
+  std::vector<vk::raii::DescriptorSet> m_instanceDataDescriptorSets;
 
 public:
   // Constructor now takes a pointer, or converts the reference to a pointer
   UISystem(VulkanDevice &dev, u32 inFlightFrameCount)
-      : device(&dev), frameCount(inFlightFrameCount) {}
+      : m_device(&dev), m_frameCount(inFlightFrameCount) {}
   UISystem() = default;
 
   // Private initialization function to handle fallible setup steps.
   [[nodiscard]] std::expected<void, std::string> initialize(const vk::raii::DescriptorPool &pool) {
     // Note: These helper functions are assumed to also return std::expected
     // Pass dereferenced device for helper functions that expect a reference
-    if (auto res = createInstanceBuffers(*device, frameCount, maxQuadsPerFrame, instanceBuffers,
+    if (auto res = createInstanceBuffers(*m_device, m_frameCount, m_maxQuadsPerFrame, m_instanceBuffers,
                                          sizeof(UIInstanceData));
         !res) {
       return std::unexpected("Failed to create UI instance buffers: " + res.error());
     }
-    if (auto res = createStaticQuadBuffers(*device, staticVertexBuffer, staticIndexBuffer); !res) {
+    if (auto res = createStaticQuadBuffers(*m_device, m_staticVertexBuffer, m_staticIndexBuffer); !res) {
       return std::unexpected("Failed to create static quad buffers: " + res.error());
     }
     if (auto res = createInstanceDataDescriptorSetLayout(); !res) {
@@ -80,13 +80,13 @@ public:
 
   ~UISystem() = default;
 
-  void beginFrame() { queuedInstances.clear(); }
+  void beginFrame() { m_queuedInstances.clear(); }
 
   void queueQuad(Quad quad) {
-    if (queuedInstances.size() >= maxQuadsPerFrame) {
+    if (m_queuedInstances.size() >= m_maxQuadsPerFrame) {
       return;
     }
-    queuedInstances.emplace_back(UIInstanceData{.quad = quad});
+    m_queuedInstances.emplace_back(UIInstanceData{.quad = quad});
   }
 
   // REPLACES the old `draw` method.
@@ -95,30 +95,30 @@ public:
                       vk::Extent2D windowSize) {
     glm::mat4 ortho = glm::ortho(0.0F, (float)windowSize.width, 0.0F, (float)windowSize.height);
 
-    if (frameIndex >= frameCount || queuedInstances.empty()) {
+    if (frameIndex >= m_frameCount || m_queuedInstances.empty()) {
       return;
     }
 
     // 1. Copy instance data to the GPU buffer for this frame
-    VmaBuffer &currentInstanceBuffer = instanceBuffers[frameIndex];
-    size_t dataSize = queuedInstances.size() * sizeof(UIInstanceData);
+    VmaBuffer &currentInstanceBuffer = m_instanceBuffers[frameIndex];
+    size_t dataSize = m_queuedInstances.size() * sizeof(UIInstanceData);
     // Ensure the buffer is large enough for all queued instances
     if (dataSize > currentInstanceBuffer.getAllocationInfo().size) {
       // Log an error or resize the buffer (more complex)
       return;
     }
-    std::memcpy(static_cast<char *>(currentInstanceBuffer.getMappedData()), queuedInstances.data(),
+    std::memcpy(static_cast<char *>(currentInstanceBuffer.getMappedData()), m_queuedInstances.data(),
                 dataSize);
     RenderBatch batch{
         .sortKey = 100, // UI background elements could have a low sort key
         .pipeline = &uiPipeline.pipeline,
         .pipelineLayout = &uiPipeline.pipelineLayout,
-        .instanceDataSet = &instanceDataDescriptorSets[frameIndex],
+        .instanceDataSet = &m_instanceDataDescriptorSets[frameIndex],
         .textureSet = nullptr, // No texture for basic UI sheets
-        .vertexBuffer = &staticVertexBuffer,
-        .indexBuffer = &staticIndexBuffer,
+        .vertexBuffer = &m_staticVertexBuffer,
+        .indexBuffer = &m_staticIndexBuffer,
         .indexCount = 6, // Quad has 6 indices
-        .instanceCount = static_cast<u32>(queuedInstances.size()),
+        .instanceCount = static_cast<u32>(m_queuedInstances.size()),
         .firstInstance = 0,
         .dynamicOffset = 0,
         // .scale = {0, 0},
@@ -135,7 +135,7 @@ public:
 
     // Update the descriptor set to reflect the *actual* number of instances we're drawing this
     // frame.
-    updateDescriptorSets(static_cast<u32>(queuedInstances.size()), frameIndex);
+    updateDescriptorSets(static_cast<u32>(m_queuedInstances.size()), frameIndex);
   }
 
 private:
@@ -147,41 +147,41 @@ private:
                                                    .stageFlags = vk::ShaderStageFlagBits::eVertex};
     vk::DescriptorSetLayoutCreateInfo layoutInfo{.bindingCount = 1, .pBindings = &instanceBinding};
     // Use -> to access members of the pointer
-    auto layoutResult = device->logical().createDescriptorSetLayout(layoutInfo);
+    auto layoutResult = m_device->logical().createDescriptorSetLayout(layoutInfo);
     if (!layoutResult) {
       return std::unexpected("Failed to create UI instance data descriptor set layout.");
     }
-    instanceDataLayout = std::move(layoutResult.value());
+    m_instanceDataLayout = std::move(layoutResult.value());
     return {};
   }
 
   [[nodiscard]] std::expected<void, std::string>
   allocateInstanceDataDescriptorSets(const vk::raii::DescriptorPool &pool) {
-    std::vector<vk::DescriptorSetLayout> layouts(frameCount, *instanceDataLayout);
+    std::vector<vk::DescriptorSetLayout> layouts(m_frameCount, *m_instanceDataLayout);
     vk::DescriptorSetAllocateInfo allocInfo{
-        .descriptorPool = pool, .descriptorSetCount = frameCount, .pSetLayouts = layouts.data()};
+        .descriptorPool = pool, .descriptorSetCount = m_frameCount, .pSetLayouts = layouts.data()};
     // Use -> to access members of the pointer
-    auto setsResult = device->logical().allocateDescriptorSets(allocInfo);
+    auto setsResult = m_device->logical().allocateDescriptorSets(allocInfo);
     if (!setsResult) {
       return std::unexpected("Failed to allocate UI instance descriptor sets.");
     }
-    instanceDataDescriptorSets = std::move(setsResult.value());
+    m_instanceDataDescriptorSets = std::move(setsResult.value());
     return {};
   }
 
   void updateDescriptorSets(u32 instanceNumber, u32 frameIndex) {
     vk::DescriptorBufferInfo bufferInfo{
-        .buffer = instanceBuffers[frameIndex].get(),
+        .buffer = m_instanceBuffers[frameIndex].get(),
         .offset = 0,
         .range = instanceNumber * sizeof(UIInstanceData), // <--- CHANGE to UIInstanceData
     };
-    vk::WriteDescriptorSet instanceWrite{.dstSet = instanceDataDescriptorSets[frameIndex],
+    vk::WriteDescriptorSet instanceWrite{.dstSet = m_instanceDataDescriptorSets[frameIndex],
                                          .dstBinding = 0,
                                          .descriptorCount = 1,
                                          .descriptorType =
                                              vk::DescriptorType::eStorageBufferDynamic,
                                          .pBufferInfo = &bufferInfo};
     // Use -> to access members of the pointer
-    device->logical().updateDescriptorSets({instanceWrite}, nullptr);
+    m_device->logical().updateDescriptorSets({instanceWrite}, nullptr);
   }
 };

@@ -24,13 +24,13 @@ template <typename F> struct ScopeGuard {
 // This structure holds all the information needed to render a single character.
 export struct GlyphInfo {
   // Texture coordinates for the glyph in the atlas
-  float uv_x0, uv_y0, uv_x1, uv_y1;
+  float uvX0, uvY0, uvX1, uvY1;
 
   // Size of the glyph quad in pixels
   float width, height;
 
   // The offset from the text cursor's baseline to the glyph's top-left corner
-  float bearing_x, bearing_y;
+  float bearingX, bearingY;
 
   // The horizontal distance to advance the cursor to the next character
   float advance;
@@ -40,16 +40,16 @@ export struct GlyphInfo {
 export struct FontAtlasData {
   // The atlas is now multi-channel (4 channels for MTSDF)
   std::vector<msdf_atlas::byte> atlasBitmap;
-  int atlasWidth;
-  int atlasHeight;
+  int atlasWidth{};
+  int atlasHeight{};
   std::map<msdfgen::unicode_t, GlyphInfo> glyphs;
-  double pxRange;    // Store the pixel range for the shader
-  double atlasScale; // **NEW**: Store the scale used by the atlas packer
+  double pxRange{};    // Store the pixel range for the shader
+  double atlasScale{}; // **NEW**: Store the scale used by the atlas packer
 
-  double unitsPerEm; // Font design units per EM
-  double ascender;   // Distance from baseline to highest point
-  double descender;  // Distance from baseline to lowest point
-  double lineHeight; // Recommended line spacing
+  double unitsPerEm{}; // Font design units per EM
+  double ascender{};   // Distance from baseline to highest point
+  double descender{};  // Distance from baseline to lowest point
+  double lineHeight{}; // Recommended line spacing
 };
 
 export struct Font {
@@ -87,7 +87,7 @@ createFontAtlasMSDF(const std::string &fontPath, int pixelHeight) {
   ScopeGuard fontGuard([&]() { msdfgen::destroyFont(font); });
 
   // Get font metrics
-  msdfgen::FontMetrics metrics;
+  msdfgen::FontMetrics metrics{};
   if (!msdfgen::getFontMetrics(metrics, font, msdfgen::FONT_SCALING_NONE)) {
     return std::unexpected("Failed to get font metrics");
   }
@@ -98,28 +98,28 @@ createFontAtlasMSDF(const std::string &fontPath, int pixelHeight) {
   atlasData.lineHeight = metrics.lineHeight;
 
   // --- Configuration ---
-  const double angleThreshold = 3.0;
-  const double miterLimit = 1.0;
+  const double ANGLE_THRESHOLD = 3.0;
+  const double MITER_LIMIT = 1.0;
   atlasData.pxRange = atlasData.unitsPerEm / 128; // The distance field range in atlas pixels.
   // atlasData.pxRange = 2.0;
 
-  const std::string fullCharset = " !,."
+  const std::string FULL_CHARSET = " !,."
                                   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                                   "abcdefghijklmnopqrstuvwxyz";
   std::string currentCharset = "Vulkan?";
   if (currentCharset.empty()) {
-    currentCharset = fullCharset;
+    currentCharset = FULL_CHARSET;
   }
-  currentCharset = fullCharset;
+  currentCharset = FULL_CHARSET;
 
   std::vector<msdf_atlas::GlyphGeometry> glyphs;
 
-  for (char c_char : currentCharset) {
-    auto c = static_cast<msdfgen::unicode_t>(c_char);
+  for (char cChar : currentCharset) {
+    auto c = static_cast<msdfgen::unicode_t>(cChar);
     msdf_atlas::GlyphGeometry glyphGeometry;
-    const double geometryScale = 0.25; // This is a typical value, adjust if needed
-    if (!glyphGeometry.load(font, geometryScale, c, true)) {
-      std::cerr << "Warning: Could not load glyph geometry for character '" << c_char << "'\n";
+    const double GEOMETRY_SCALE = 0.25; // This is a typical value, adjust if needed
+    if (!glyphGeometry.load(font, GEOMETRY_SCALE, c, true)) {
+      std::cerr << "Warning: Could not load glyph geometry for character '" << cChar << "'\n";
       continue;
     }
     glyphs.emplace_back(glyphGeometry); // Use move to avoid copy if GlyphGeometry is large
@@ -142,7 +142,7 @@ createFontAtlasMSDF(const std::string &fontPath, int pixelHeight) {
 
   // Apply edge coloring to all loaded glyphs
   for (msdf_atlas::GlyphGeometry &glyph : glyphs) {
-    glyph.edgeColoring(msdfgen::edgeColoringSimple, angleThreshold, 0);
+    glyph.edgeColoring(msdfgen::edgeColoringSimple, ANGLE_THRESHOLD, 0);
   }
 
   // --- Atlas Packing ---
@@ -151,12 +151,13 @@ createFontAtlasMSDF(const std::string &fontPath, int pixelHeight) {
   // Let the packer determine the scale automatically based on glyphs and pixel
   // range Or uncomment the next line to force a specific pixel size for the EM
   // square packer.setScale(static_cast<double>(pixelHeight));
-  packer.setMiterLimit(miterLimit);
+  packer.setMiterLimit(MITER_LIMIT);
   packer.setOuterUnitPadding(32);
   // packer.setScale(1.0);
   packer.pack(glyphs.data(), glyphs.size());
 
-  int width = 0, height = 0;
+  int width = 0;
+  int height = 0;
   packer.getDimensions(width, height);
   atlasData.atlasWidth = width;
   atlasData.atlasHeight = height;
@@ -201,26 +202,32 @@ createFontAtlasMSDF(const std::string &fontPath, int pixelHeight) {
   // --- Store Glyph Metrics ---
   std::println("DEBUG: Glyph metrics stored. Total glyphs: {}", glyphs.size());
   for (const auto &glyph : glyphs) {
-    double l, b, r, t;
+    double l;
+    double b;
+    double r;
+    double t;
     glyph.getQuadPlaneBounds(l, b, r, t);
 
-    double u, v, s, w;
+    double u;
+    double v;
+    double s;
+    double w;
     glyph.getQuadAtlasBounds(u, v, s, w);
 
     GlyphInfo info{};
     // Normalize UVs to [0, 1] range
-    info.uv_x0 = static_cast<float>(u / atlasData.atlasWidth);
-    info.uv_y0 = static_cast<float>(w / atlasData.atlasHeight);
-    info.uv_x1 = static_cast<float>(s / atlasData.atlasWidth);
-    info.uv_y1 = static_cast<float>(v / atlasData.atlasHeight);
+    info.uvX0 = static_cast<float>(u / atlasData.atlasWidth);
+    info.uvY0 = static_cast<float>(w / atlasData.atlasHeight);
+    info.uvX1 = static_cast<float>(s / atlasData.atlasWidth);
+    info.uvY1 = static_cast<float>(v / atlasData.atlasHeight);
 
     // Store glyph plane dimensions (in font units)
     info.width = static_cast<float>(r - l);
     info.height = static_cast<float>(t - b);
 
     // Store bearing (in font units)
-    info.bearing_x = static_cast<float>(l);
-    info.bearing_y = static_cast<float>(t);
+    info.bearingX = static_cast<float>(l);
+    info.bearingY = static_cast<float>(t);
 
     // Store advance (in font units)
     info.advance = static_cast<float>(glyph.getAdvance());

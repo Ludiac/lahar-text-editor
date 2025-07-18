@@ -1,12 +1,12 @@
 import vulkan_app;
 
 int main() {
-  SDL_Wrapper SDL;
-  SDL.init();
+  SdlWrapper sdl;
+  sdl.init();
   {
     App app;
-    app.run(SDL.window);
+    app.run(sdl.window);
   }
-  SDL.terminate();
+  sdl.terminate();
   return 0;
 }

@@ -23,9 +23,6 @@ export struct StyledRange {
   usize start;
   usize length;
   TextStyle style;
-
-  // For sorting and searching ranges
-  bool operator<(const StyledRange &other) const { return start < other.start; }
 } __attribute__((aligned(32)));
 
 /**
@@ -51,28 +48,17 @@ public:
   // --- Configuration ---
 
   /**
-   * @brief Sets the dimensions of the view area in pixels.
-   */
-  void setDimensions(f64 Width, f64 Height) {
-    width = Width;
-    height = Height;
-    // In a real implementation, we might recalculate visible lines here.
-  }
-
-  // --- Scrolling ---
-
-  /**
    * @brief Scrolls the view vertically by a number of lines.
    * @param delta_lines Positive to scroll down, negative to scroll up.
    */
-  void scroll(i32 delta_lines) {
-    if (delta_lines > 0) {
-      usize max_first_line = m_editor.lineCount() > 0 ? m_editor.lineCount() - 1 : 0;
-      m_first_visible_line = std::min(m_first_visible_line + (usize)delta_lines, max_first_line);
-    } else if (delta_lines < 0) {
-      usize scroll_amount = -delta_lines;
+  void scroll(i32 deltaLines) {
+    if (deltaLines > 0) {
+      usize maxFirstLine = m_editor.lineCount() > 0 ? m_editor.lineCount() - 1 : 0;
+      m_first_visible_line = std::min(m_first_visible_line + (usize)deltaLines, maxFirstLine);
+    } else if (deltaLines < 0) {
+      usize scrollAmount = -deltaLines;
       m_first_visible_line =
-          (m_first_visible_line > scroll_amount) ? m_first_visible_line - scroll_amount : 0;
+          (m_first_visible_line > scrollAmount) ? m_first_visible_line - scrollAmount : 0;
     }
   }
 
@@ -88,7 +74,7 @@ public:
     // A more robust implementation would merge this with existing ranges.
     m_styles.emplace_back(StyledRange{.start = start, .length = length, .style = style});
     // Keep styles sorted for efficient lookup.
-    std::sort(m_styles.begin(), m_styles.end());
+    std::ranges::sort(m_styles, {}, &StyledRange::start);
   }
 
   /**
@@ -100,15 +86,14 @@ public:
    * @brief Gets the style for a character at a specific position.
    * @return The applied style, or a default style if none is found.
    */
-  [[nodiscard]] TextStyle getStyleAt(usize char_pos) const {
+  [[nodiscard]] TextStyle getStyleAt(usize charPos) const {
     // Find the last style that starts at or before char_pos
-    auto style_it = std::upper_bound(m_styles.begin(), m_styles.end(),
-                                     StyledRange{.start = char_pos, .length = 0, .style = {}});
-    if (style_it != m_styles.begin()) {
-      --style_it; // Move to the potential containing range
+    auto styleIt = std::ranges::upper_bound(m_styles, charPos, {}, &StyledRange::start);
+    if (styleIt != m_styles.begin()) {
+      --styleIt; // Move to the potential containing range
       // Check if the position is actually within this range
-      if (char_pos < style_it->start + style_it->length) {
-        return style_it->style;
+      if (charPos < styleIt->start + styleIt->length) {
+        return styleIt->style;
       }
     }
     return m_default_style; // Return default if no style applies
@@ -129,14 +114,13 @@ public:
       return 20; // Fallback
     }
     // This is a simplified calculation. A real implementation would use font metrics.
-    const f64 fontUnitToPixelScale =
+    const f64 FONT_UNIT_TO_PIXEL_SCALE =
         fontPointSize * (96.0 / 72.0 * 4) / m_font.atlasData.unitsPerEm;
-    const f64 line_height_px = m_font.atlasData.lineHeight * fontUnitToPixelScale;
+    const f64 LINE_HEIGHT_PX = m_font.atlasData.lineHeight * FONT_UNIT_TO_PIXEL_SCALE;
 
-    return static_cast<usize>(height / line_height_px);
+    return static_cast<usize>(height / LINE_HEIGHT_PX);
   }
 
-public:
   f64 width = 0.0;
   f64 height = 0.0;
   f64 fontPointSize = 36.0;

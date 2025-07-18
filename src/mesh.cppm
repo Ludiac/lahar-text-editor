@@ -19,25 +19,26 @@ public:
   u32 indexCount{0};
 
 private:
-  VulkanDevice &device_;
-  u32 imageCount_member;
+  VulkanDevice &m_device;
+  u32 m_imageCount_member;
 
-  std::vector<Vertex> vertices_data;
-  std::vector<u32> indices_data;
+  std::vector<Vertex> m_vertices_data;
+  std::vector<u32> m_indices_data;
 
-  VmaBuffer vertexBuffer;
-  VmaBuffer indexBuffer;
-  VmaBuffer mvpUniformBuffers;
-  VmaBuffer materialUniformBuffer;
+  VmaBuffer m_vertexBuffer;
+  VmaBuffer m_indexBuffer;
+  VmaBuffer m_mvpUniformBuffers;
+  VmaBuffer m_materialUniformBuffer;
 
-  std::vector<vk::raii::DescriptorSet> descriptorSets;
+  std::vector<vk::raii::DescriptorSet> m_descriptorSets;
 
   [[nodiscard]] std::expected<void, std::string> createVertexBuffer() NOEXCEPT {
-    if (vertices_data.empty())
+    if (m_vertices_data.empty()) {
       return {};
-    const auto bufferSize = sizeof(Vertex) * vertices_data.size();
+}
+    const auto BUFFER_SIZE = sizeof(Vertex) * m_vertices_data.size();
 
-    vk::BufferCreateInfo bufferInfo{.size = bufferSize,
+    vk::BufferCreateInfo bufferInfo{.size = BUFFER_SIZE,
                                     .usage = vk::BufferUsageFlagBits::eVertexBuffer
 
     };
@@ -48,52 +49,58 @@ private:
 
     };
 
-    auto bufferResult = device_.createBufferVMA(bufferInfo, allocInfo);
-    if (!bufferResult)
+    auto bufferResult = m_device.createBufferVMA(bufferInfo, allocInfo);
+    if (!bufferResult) {
       return std::unexpected("Mesh '" + name +
                              "': Vertex VmaBuffer creation: " + bufferResult.error());
-    vertexBuffer = std::move(bufferResult.value());
+}
+    m_vertexBuffer = std::move(bufferResult.value());
 
-    if (!vertexBuffer.getMappedData())
+    if (m_vertexBuffer.getMappedData() == nullptr) {
       return std::unexpected("Mesh '" + name + "': Vertex VmaBuffer not mapped after creation.");
+}
 
-    std::memcpy(vertexBuffer.getMappedData(), vertices_data.data(), bufferSize);
+    std::memcpy(m_vertexBuffer.getMappedData(), m_vertices_data.data(), BUFFER_SIZE);
 
     return {};
   }
 
   [[nodiscard]] std::expected<void, std::string> createIndexBuffer() NOEXCEPT {
-    if (indices_data.empty()) {
+    if (m_indices_data.empty()) {
       this->indexCount = 0;
       return {};
     }
-    this->indexCount = static_cast<u32>(indices_data.size());
-    const auto bufferSize = sizeof(u32) * indices_data.size();
+    this->indexCount = static_cast<u32>(m_indices_data.size());
+    const auto BUFFER_SIZE = sizeof(u32) * m_indices_data.size();
 
-    vk::BufferCreateInfo bufferInfo{.size = bufferSize,
+    vk::BufferCreateInfo bufferInfo{.size = BUFFER_SIZE,
                                     .usage = vk::BufferUsageFlagBits::eIndexBuffer};
     vma::AllocationCreateInfo allocInfo{
         .flags = vma::AllocationCreateFlagBits::eHostAccessSequentialWrite |
                  vma::AllocationCreateFlagBits::eMapped,
         .usage = vma::MemoryUsage::eAutoPreferHost};
-    auto bufferResult = device_.createBufferVMA(bufferInfo, allocInfo);
-    if (!bufferResult)
+    auto bufferResult = m_device.createBufferVMA(bufferInfo, allocInfo);
+    if (!bufferResult) {
       return std::unexpected("Mesh '" + name +
                              "': Index VmaBuffer creation: " + bufferResult.error());
-    indexBuffer = std::move(bufferResult.value());
+}
+    m_indexBuffer = std::move(bufferResult.value());
 
-    if (!indexBuffer.getMappedData())
+    if (m_indexBuffer.getMappedData() == nullptr) {
       return std::unexpected("Mesh '" + name + "': Index VmaBuffer not mapped.");
-    std::memcpy(indexBuffer.getMappedData(), indices_data.data(), bufferSize);
+}
+    std::memcpy(m_indexBuffer.getMappedData(), m_indices_data.data(), BUFFER_SIZE);
     return {};
   }
 
   [[nodiscard]] std::expected<void, std::string> createMvpUniformBuffers() NOEXCEPT {
-    if (imageCount_member == 0)
+    if (m_imageCount_member == 0) {
       return {};
-    auto bufferSize = sizeof(UniformBufferObject) * imageCount_member;
-    if (bufferSize == 0)
+}
+    auto bufferSize = sizeof(UniformBufferObject) * m_imageCount_member;
+    if (bufferSize == 0) {
       return {};
+}
 
     vk::BufferCreateInfo bufferInfo{.size = bufferSize,
                                     .usage = vk::BufferUsageFlagBits::eUniformBuffer};
@@ -101,22 +108,25 @@ private:
         .flags = vma::AllocationCreateFlagBits::eHostAccessSequentialWrite |
                  vma::AllocationCreateFlagBits::eMapped,
         .usage = vma::MemoryUsage::eAutoPreferHost};
-    auto bufferResult = device_.createBufferVMA(bufferInfo, allocInfo);
-    if (!bufferResult)
+    auto bufferResult = m_device.createBufferVMA(bufferInfo, allocInfo);
+    if (!bufferResult) {
       return std::unexpected("Mesh '" + name +
                              "': MVP UBO VmaBuffer creation: " + bufferResult.error());
-    mvpUniformBuffers = std::move(bufferResult.value());
+}
+    m_mvpUniformBuffers = std::move(bufferResult.value());
     return {};
   }
 
   [[nodiscard]] std::expected<void, std::string> createSingleMaterialUniformBuffer() NOEXCEPT {
-    if (imageCount_member == 0)
+    if (m_imageCount_member == 0) {
       return {};
-    auto alignment = device_.physical().getProperties().limits.minUniformBufferOffsetAlignment;
+}
+    auto alignment = m_device.physical().getProperties().limits.minUniformBufferOffsetAlignment;
     auto alignedMaterialSize = (sizeof(Material) + alignment - 1) & ~(alignment - 1);
-    auto bufferSize = alignedMaterialSize * imageCount_member;
-    if (bufferSize == 0)
+    auto bufferSize = alignedMaterialSize * m_imageCount_member;
+    if (bufferSize == 0) {
       return {};
+}
 
     vk::BufferCreateInfo bufferInfo{.size = bufferSize,
                                     .usage = vk::BufferUsageFlagBits::eUniformBuffer};
@@ -124,13 +134,14 @@ private:
         .flags = vma::AllocationCreateFlagBits::eHostAccessSequentialWrite |
                  vma::AllocationCreateFlagBits::eMapped,
         .usage = vma::MemoryUsage::eAutoPreferHost};
-    auto bufferResult = device_.createBufferVMA(bufferInfo, allocInfo);
-    if (!bufferResult)
+    auto bufferResult = m_device.createBufferVMA(bufferInfo, allocInfo);
+    if (!bufferResult) {
       return std::unexpected("Mesh '" + name +
                              "': Material UBO VmaBuffer creation: " + bufferResult.error());
-    materialUniformBuffer = std::move(bufferResult.value());
+}
+    m_materialUniformBuffer = std::move(bufferResult.value());
 
-    for (u32 i = 0; i < imageCount_member; ++i) {
+    for (u32 i = 0; i < m_imageCount_member; ++i) {
       updateMaterialUniformBufferData(i);
     }
     return {};
@@ -140,9 +151,9 @@ public:
   Mesh(VulkanDevice &dev, std::string meshName, std::vector<Vertex> &&verts,
        std::vector<u32> &&meshIndices, Material initMaterial, PBRTextures initPbrTextures,
        u32 numImages)
-      : device_(dev), name(std::move(meshName)), material(std::move(initMaterial)),
-        textures(std::move(initPbrTextures)), imageCount_member(numImages),
-        vertices_data(std::move(verts)), indices_data(std::move(meshIndices)) {
+      : m_device(dev), name(std::move(meshName)), material(initMaterial),
+        textures(std::move(initPbrTextures)), m_imageCount_member(numImages),
+        m_vertices_data(std::move(verts)), m_indices_data(std::move(meshIndices)) {
     EXPECTED_VOID(createVertexBuffer());
     EXPECTED_VOID(createIndexBuffer());
     EXPECTED_VOID(createMvpUniformBuffers());
@@ -150,25 +161,27 @@ public:
   }
 
   void updateMaterialUniformBufferData(u32 currentImage) {
-    if (!materialUniformBuffer || currentImage >= imageCount_member)
+    if (!m_materialUniformBuffer || currentImage >= m_imageCount_member) {
       return;
-    if (!materialUniformBuffer.getMappedData()) {
+}
+    if (m_materialUniformBuffer.getMappedData() == nullptr) {
       std::println("Error: Mesh '{}': Material UBO not mapped for image index {}.", name,
                    currentImage);
       return;
     }
-    auto alignment = device_.physical().getProperties().limits.minUniformBufferOffsetAlignment;
+    auto alignment = m_device.physical().getProperties().limits.minUniformBufferOffsetAlignment;
     auto alignedMaterialSize = (sizeof(Material) + alignment - 1) & ~(alignment - 1);
     vk::DeviceSize offset = currentImage * alignedMaterialSize;
-    char *baseMapped = static_cast<char *>(materialUniformBuffer.getMappedData());
+    char *baseMapped = static_cast<char *>(m_materialUniformBuffer.getMappedData());
     std::memcpy(baseMapped + offset, &this->material, sizeof(Material));
   }
 
   void updateMvpUniformBuffer(u32 currentImage, const glm::mat4 &model, const glm::mat4 &view,
                               const glm::mat4 &projection) {
-    if (!mvpUniformBuffers || currentImage >= imageCount_member)
+    if (!m_mvpUniformBuffers || currentImage >= m_imageCount_member) {
       return;
-    if (!mvpUniformBuffers.getMappedData()) {
+}
+    if (m_mvpUniformBuffers.getMappedData() == nullptr) {
       std::println("Error: Mesh '{}': MVP UBO not mapped for image index {}.", name, currentImage);
       return;
     }
@@ -181,14 +194,14 @@ public:
     ubo.normalMatrix = glm::transpose(glm::inverse(model));
 
     vk::DeviceSize offset = sizeof(UniformBufferObject) * currentImage;
-    char *baseMapped = static_cast<char *>(mvpUniformBuffers.getMappedData());
+    char *baseMapped = static_cast<char *>(m_mvpUniformBuffers.getMappedData());
     std::memcpy(baseMapped + offset, &ubo, sizeof(ubo));
   }
 
   [[nodiscard]] std::expected<void, std::string>
   allocateDescriptorSets(const vk::raii::DescriptorPool &pool,
                          const vk::raii::DescriptorSetLayout &combinedLayout) {
-    if (imageCount_member == 0) {
+    if (m_imageCount_member == 0) {
       std::string errorMsg =
           "Mesh " + name + ": Image count is zero for descriptor set allocation.";
       return std::unexpected(errorMsg);
@@ -198,25 +211,25 @@ public:
           "Mesh " + name + ": Combined layout is null for descriptor set allocation.";
       return std::unexpected(errorMsg);
     }
-    std::vector<vk::DescriptorSetLayout> layouts(imageCount_member, *combinedLayout);
+    std::vector<vk::DescriptorSetLayout> layouts(m_imageCount_member, *combinedLayout);
     vk::DescriptorSetAllocateInfo allocInfo{
         .descriptorPool = *pool,
-        .descriptorSetCount = imageCount_member,
+        .descriptorSetCount = m_imageCount_member,
         .pSetLayouts = layouts.data(),
     };
-    auto setsResult = device_.logical().allocateDescriptorSets(allocInfo);
+    auto setsResult = m_device.logical().allocateDescriptorSets(allocInfo);
     if (!setsResult) {
       std::string errorMsg = "Mesh " + name + ": Failed to allocate combined descriptor sets: " +
                              vk::to_string(setsResult.error());
       return std::unexpected(errorMsg);
     }
-    descriptorSets = std::move(setsResult.value());
+    m_descriptorSets = std::move(setsResult.value());
     return {};
   }
 
   void updateDescriptorSetContents(u32 currentImage) {
-    if (currentImage >= imageCount_member || descriptorSets.empty() ||
-        currentImage >= descriptorSets.size() || !*descriptorSets[currentImage]) {
+    if (currentImage >= m_imageCount_member || m_descriptorSets.empty() ||
+        currentImage >= m_descriptorSets.size() || !*m_descriptorSets[currentImage]) {
       return;
     }
     std::vector<vk::WriteDescriptorSet> writes;
@@ -227,13 +240,13 @@ public:
     vk::DescriptorImageInfo metallicRoughnessTextureInfoStorage;
     vk::DescriptorImageInfo occlusionTextureInfoStorage;
     vk::DescriptorImageInfo emissiveTextureInfoStorage;
-    if (mvpUniformBuffers) {
+    if (m_mvpUniformBuffers) {
       mvpUboInfoStorage =
-          vk::DescriptorBufferInfo{.buffer = mvpUniformBuffers.buffer_,
+          vk::DescriptorBufferInfo{.buffer = m_mvpUniformBuffers.buffer,
                                    .offset = currentImage * sizeof(UniformBufferObject),
                                    .range = sizeof(UniformBufferObject)};
       writes.emplace_back(
-          vk::WriteDescriptorSet{.dstSet = *descriptorSets[currentImage],
+          vk::WriteDescriptorSet{.dstSet = *m_descriptorSets[currentImage],
                                  .dstBinding = 0,
                                  .dstArrayElement = 0,
                                  .descriptorCount = 1,
@@ -242,15 +255,15 @@ public:
     } else {
     }
 
-    if (materialUniformBuffer) {
-      auto alignment = device_.physical().getProperties().limits.minUniformBufferOffsetAlignment;
+    if (m_materialUniformBuffer) {
+      auto alignment = m_device.physical().getProperties().limits.minUniformBufferOffsetAlignment;
       auto alignedMaterialSize = (sizeof(Material) + alignment - 1) & ~(alignment - 1);
       materialUboInfoStorage =
-          vk::DescriptorBufferInfo{.buffer = materialUniformBuffer.buffer_,
+          vk::DescriptorBufferInfo{.buffer = m_materialUniformBuffer.buffer,
                                    .offset = currentImage * alignedMaterialSize,
                                    .range = sizeof(Material)};
       writes.emplace_back(
-          vk::WriteDescriptorSet{.dstSet = *descriptorSets[currentImage],
+          vk::WriteDescriptorSet{.dstSet = *m_descriptorSets[currentImage],
                                  .dstBinding = 1,
                                  .dstArrayElement = 0,
                                  .descriptorCount = 1,
@@ -259,7 +272,7 @@ public:
     } else {
     }
 
-    auto create_texture_write = [&](uint32_t binding, vk::DescriptorImageInfo &imageInfo,
+    auto createTextureWrite = [&](uint32_t binding, vk::DescriptorImageInfo &imageInfo,
                                     const std::shared_ptr<Texture> &texture) {
       if (!texture) {
         std::print("no texture {}", binding);
@@ -278,7 +291,7 @@ public:
                                             .imageView = *texture->view,
                                             .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal};
         writes.emplace_back(
-            vk::WriteDescriptorSet{.dstSet = *descriptorSets[currentImage],
+            vk::WriteDescriptorSet{.dstSet = *m_descriptorSets[currentImage],
                                    .dstBinding = binding,
                                    .dstArrayElement = 0,
                                    .descriptorCount = 1,
@@ -287,44 +300,44 @@ public:
       }
     };
 
-    create_texture_write(2, baseColorTextureInfoStorage, textures.baseColor);
-    create_texture_write(3, normalTextureInfoStorage, textures.normal);
-    create_texture_write(4, metallicRoughnessTextureInfoStorage, textures.metallicRoughness);
-    create_texture_write(5, occlusionTextureInfoStorage, textures.occlusion);
-    create_texture_write(6, emissiveTextureInfoStorage, textures.emissive);
+    createTextureWrite(2, baseColorTextureInfoStorage, textures.baseColor);
+    createTextureWrite(3, normalTextureInfoStorage, textures.normal);
+    createTextureWrite(4, metallicRoughnessTextureInfoStorage, textures.metallicRoughness);
+    createTextureWrite(5, occlusionTextureInfoStorage, textures.occlusion);
+    createTextureWrite(6, emissiveTextureInfoStorage, textures.emissive);
 
     if (!writes.empty()) {
-      device_.logical().updateDescriptorSets(writes, nullptr);
+      m_device.logical().updateDescriptorSets(writes, nullptr);
     } else {
     }
   }
 
   void bind(vk::raii::CommandBuffer &cmd, VulkanPipeline *pipeline, u32 currentImage) const {
-    if (!vertexBuffer) {
+    if (!m_vertexBuffer) {
       return;
     }
-    if (!indexBuffer && indexCount > 0) {
+    if (!m_indexBuffer && indexCount > 0) {
       return;
     }
-    if (descriptorSets.empty() || currentImage >= descriptorSets.size() ||
-        !*descriptorSets[currentImage]) {
+    if (m_descriptorSets.empty() || currentImage >= m_descriptorSets.size() ||
+        !*m_descriptorSets[currentImage]) {
       return;
     }
-    if (!pipeline || !*pipeline->pipelineLayout) {
+    if ((pipeline == nullptr) || !*pipeline->pipelineLayout) {
       return;
     }
-    cmd.bindVertexBuffers(0, {vertexBuffer.buffer_}, {0});
-    if (indexCount > 0 && indexBuffer) {
-      cmd.bindIndexBuffer(indexBuffer.buffer_, 0, vk::IndexType::eUint32);
+    cmd.bindVertexBuffers(0, {m_vertexBuffer.buffer}, {0});
+    if (indexCount > 0 && m_indexBuffer) {
+      cmd.bindIndexBuffer(m_indexBuffer.buffer, 0, vk::IndexType::eUint32);
     }
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline->pipelineLayout, 0,
-                           {*descriptorSets[currentImage]}, {});
+                           {*m_descriptorSets[currentImage]}, {});
   }
 
   void draw(vk::raii::CommandBuffer &cmd) const {
     if (indexCount > 0) {
       cmd.drawIndexed(indexCount, 1, 0, 0, 0);
-    } else if (!vertices_data.empty()) {
+    } else if (!m_vertices_data.empty()) {
     } else {
     }
   }
@@ -332,15 +345,15 @@ public:
   [[nodiscard]] std::expected<void, std::string>
   setImageCount(u32 newCount, const vk::raii::DescriptorPool &pool,
                 const vk::raii::DescriptorSetLayout &layout) NOEXCEPT {
-    if (newCount == imageCount_member) {
+    if (newCount == m_imageCount_member) {
       return {};
     }
-    imageCount_member = newCount;
+    m_imageCount_member = newCount;
     EXPECTED_VOID(createMvpUniformBuffers());
     EXPECTED_VOID(createSingleMaterialUniformBuffer());
     EXPECTED_VOID(allocateDescriptorSets(pool, layout));
     return {};
   }
   Material &getMaterial() { return material; }
-  const std::string &getName() const { return name; }
+  [[nodiscard]] const std::string &getName() const { return name; }
 };

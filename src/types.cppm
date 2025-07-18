@@ -52,21 +52,21 @@ export struct Transform {
   glm::vec3 translation{0.0};
   glm::vec3 scale{1.0};
   glm::quat rotation{glm::identity<glm::quat>()};
-  glm::vec3 rotation_speed_euler_dps{0.0};
+  glm::vec3 rotationSpeedEulerDps{0.0};
 
-  void update(float delta_time) {
-    if (glm::length(rotation_speed_euler_dps) > 0.0) {
-      glm::vec3 angular_change_rad = glm::radians(rotation_speed_euler_dps) * delta_time;
-      auto delta_rotation = glm::quat(angular_change_rad);
-      rotation = glm::normalize(delta_rotation * rotation);
+  void update(float deltaTime) {
+    if (glm::length(rotationSpeedEulerDps) > 0.0) {
+      glm::vec3 angularChangeRad = glm::radians(rotationSpeedEulerDps) * deltaTime;
+      auto deltaRotation = glm::quat(angularChangeRad);
+      rotation = glm::normalize(deltaRotation * rotation);
     }
   }
 
   [[nodiscard]] glm::mat4 getMatrix() const {
-    glm::mat4 trans_matrix = glm::translate(glm::mat4(1.0), translation);
-    glm::mat4 rot_matrix = glm::mat4_cast(rotation);
-    glm::mat4 scale_matrix = glm::scale(glm::mat4(1.0), scale);
-    return trans_matrix * rot_matrix * scale_matrix;
+    glm::mat4 transMatrix = glm::translate(glm::mat4(1.0), translation);
+    glm::mat4 rotMatrix = glm::mat4_cast(rotation);
+    glm::mat4 scaleMatrix = glm::scale(glm::mat4(1.0), scale);
+    return transMatrix * rotMatrix * scaleMatrix;
   }
 };
 
@@ -112,40 +112,40 @@ struct alignas(16) Material {
   float occlusionStrength{1.0};
 
 private:
-  float _pad0;
+  float m_pad0;
 
 public:
   alignas(16) glm::vec3 emissiveFactor{0.0, 0.0, 0.0};
 
 private:
-  float _pad1;
+  float m_pad1;
 
 public:
   float normalScale{1.0};
   float heightScale{0.0};
 
 private:
-  float _pad2[2];
+  float m_pad2[2];
 
 public:
   float transmissionFactor{0.0};
 
 private:
-  float _pad3[3];
+  float m_pad3[3];
 
 public:
   float clearcoatFactor{0.0};
   float clearcoatRoughness{0.0};
 
 private:
-  glm::vec2 _pad4{0.0, 0.0};
+  glm::vec2 m_pad4{0.0, 0.0};
 
 public:
   glm::vec3 sheenColorFactor{0.0, 0.0, 0.0};
   float sheenRoughness{0.0};
 
 private:
-  float _pad5;
+  float m_pad5;
 };
 
 /**
@@ -153,42 +153,42 @@ private:
  */
 export class Camera {
 public:
-  glm::vec3 Position{-10.0, -10.0, 60.0};
-  float Yaw = -75.0;
-  float Pitch = 10.0;
-  float Roll = 180.0;
-  float Zoom = 45.0;
-  float Near = 0.1;
-  float Far = 10000.0;
+  glm::vec3 position{-10.0, -10.0, 60.0};
+  float yaw = -75.0;
+  float pitch = 10.0;
+  float roll = 180.0;
+  float zoom = 45.0;
+  float near = 0.1;
+  float far = 10000.0;
 
-  float MovementSpeed = 10.;
-  float MouseSensitivity = 0.1;
-  bool MouseCaptured = false;
+  float movementSpeed = 10.;
+  float mouseSensitivity = 0.1;
+  bool mouseCaptured = false;
 
-  glm::vec3 Front{0.0, 0.0, -1.0};
-  glm::vec3 Right{1.0, 0.0, 0.0};
-  glm::vec3 Up{0.0, 1.0, 0.0};
-  glm::vec3 WorldUp{0.0, 1.0, 0.0};
+  glm::vec3 front{0.0, 0.0, -1.0};
+  glm::vec3 right{1.0, 0.0, 0.0};
+  glm::vec3 up{0.0, 1.0, 0.0};
+  glm::vec3 worldUp{0.0, 1.0, 0.0};
 
-  [[nodiscard]] glm::mat4 GetViewMatrix() const {
-    return glm::lookAt(Position, Position + Front, Up);
+  [[nodiscard]] glm::mat4 getViewMatrix() const {
+    return glm::lookAt(position, position + front, up);
   }
 
-  [[nodiscard]] glm::mat4 GetProjectionMatrix(float aspectRatio) const {
-    return glm::perspective(glm::radians(Zoom), aspectRatio, Near, Far);
+  [[nodiscard]] glm::mat4 getProjectionMatrix(float aspectRatio) const {
+    return glm::perspective(glm::radians(zoom), aspectRatio, near, far);
   }
 
   void updateVectors() {
     glm::vec3 front;
-    front.x = cos(glm::radians(Yaw)) * cos(glm::radians(Pitch));
-    front.y = sin(glm::radians(Pitch));
-    front.z = sin(glm::radians(Yaw)) * cos(glm::radians(Pitch));
-    Front = glm::normalize(front);
+    front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+    front.y = sin(glm::radians(pitch));
+    front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+    front = glm::normalize(front);
 
-    glm::quat rollQuat = glm::angleAxis(glm::radians(Roll), Front);
-    glm::vec3 rolledUp = rollQuat * WorldUp;
+    glm::quat rollQuat = glm::angleAxis(glm::radians(roll), front);
+    glm::vec3 rolledUp = rollQuat * worldUp;
 
-    Right = glm::normalize(glm::cross(Front, rolledUp));
-    Up = glm::normalize(glm::cross(Right, Front));
+    right = glm::normalize(glm::cross(front, rolledUp));
+    up = glm::normalize(glm::cross(right, front));
   }
 };

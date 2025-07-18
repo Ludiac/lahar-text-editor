@@ -11,9 +11,9 @@ import vulkan_hpp;
 import std;
 
 namespace {
-constexpr bool enable_validation_layers = ENABLE_VALIDATION;
-constexpr const char *validationLayerName = "VK_LAYER_KHRONOS_validation";
-constexpr std::array layers = {validationLayerName};
+constexpr bool ENABLE_VALIDATION_LAYERS = ENABLE_VALIDATION;
+constexpr const char *VALIDATION_LAYER_NAME = "VK_LAYER_KHRONOS_validation";
+constexpr std::array LAYERS = {VALIDATION_LAYER_NAME};
 } // namespace
 
 vk::Bool32
@@ -31,7 +31,7 @@ export struct VulkanInstance {
 
 private:
   static bool
-  IsExtensionAvailable(const ImVector<vk::ExtensionProperties> &properties,
+  isExtensionAvailable(const ImVector<vk::ExtensionProperties> &properties,
                        const char *extension) {
     for (decltype(auto) property : properties) {
       if (std::strcmp(property.extensionName, extension) == 0) {
@@ -42,17 +42,17 @@ private:
   }
 
   static bool checkValidationLayerSupport(const vk::raii::Context &context) {
-    const auto availableLayers = context.enumerateInstanceLayerProperties();
-    return std::ranges::all_of(layers, [&](const char *layer) {
+    const auto AVAILABLE_LAYERS = context.enumerateInstanceLayerProperties();
+    return std::ranges::all_of(LAYERS, [&](const char *layer) {
       return std::ranges::any_of(
-          availableLayers, [&](const auto &availableLayer) {
+          AVAILABLE_LAYERS, [&](const auto &availableLayer) {
             return std::strcmp(layer, availableLayer.layerName) == 0;
           });
     });
   }
 
 public:
-  [[nodiscard]] VkInstance get_C_handle() const { return *instance; }
+  [[nodiscard]] VkInstance getCHandle() const { return *instance; }
 
   // Access via ->
   auto operator->() { return &instance; }
@@ -62,7 +62,7 @@ public:
   operator const vk::raii::Instance &() const { return instance; }
 
   [[nodiscard]] std::expected<void, std::string> setupDebugMessenger() {
-    if constexpr (!enable_validation_layers) {
+    if constexpr (!ENABLE_VALIDATION_LAYERS) {
       return {};
     }
     if (auto expected = instance.createDebugUtilsMessengerEXT({
@@ -85,7 +85,7 @@ public:
 
   [[nodiscard]] std::expected<void, std::string> create() {
     vk::raii::Context context;
-    if constexpr (enable_validation_layers) {
+    if constexpr (ENABLE_VALIDATION_LAYERS) {
       if (!checkValidationLayerSupport(context)) {
         return std::unexpected(
             "Validation layers requested but not available!");
@@ -102,11 +102,11 @@ public:
 
     std::vector<const char *> extensions;
     {
-      u32 sdl_extensions_count = 0;
-      const auto *sdl_extensions =
-          SDL_Vulkan_GetInstanceExtensions(&sdl_extensions_count);
-      for (u32 n = 0; n < sdl_extensions_count; n++) {
-        extensions.push_back(sdl_extensions[n]);
+      u32 sdlExtensionsCount = 0;
+      const auto *sdlExtensions =
+          SDL_Vulkan_GetInstanceExtensions(&sdlExtensionsCount);
+      for (u32 n = 0; n < sdlExtensionsCount; n++) {
+        extensions.push_back(sdlExtensions[n]);
       }
     }
     extensions.push_back(vk::KHRSurfaceExtensionName);
@@ -123,7 +123,7 @@ public:
     extensions.push_back(vk::KHRXcbSurfaceExtensionName);
 #endif
 
-    if constexpr (enable_validation_layers) {
+    if constexpr (ENABLE_VALIDATION_LAYERS) {
       extensions.push_back(vk::EXTDebugUtilsExtensionName);
     }
 
@@ -133,9 +133,9 @@ public:
         .ppEnabledExtensionNames = extensions.data(),
     };
 
-    if constexpr (!enable_validation_layers) {
-      createInfo.enabledLayerCount = static_cast<u32>(layers.size());
-      createInfo.ppEnabledLayerNames = layers.data();
+    if constexpr (!ENABLE_VALIDATION_LAYERS) {
+      createInfo.enabledLayerCount = static_cast<u32>(LAYERS.size());
+      createInfo.ppEnabledLayerNames = LAYERS.data();
     }
 
     if (auto expected = context.createInstance(createInfo); expected) {

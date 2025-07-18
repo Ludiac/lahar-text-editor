@@ -28,8 +28,8 @@ export struct GltfPrimitiveData {
   int normalTextureGltfIndex = -1;
   int occlusionTextureGltfIndex = -1;
   int emissiveTextureGltfIndex = -1;
-  int transmissionTextureGltfIndex;
-  int clearcoatNormalTextureGltfIndex;
+  int transmissionTextureGltfIndex{};
+  int clearcoatNormalTextureGltfIndex{};
 
   int gltfMaterialIndex = -1;
 };
@@ -87,10 +87,10 @@ getAccessorData(const gltfm::Model &model, int accessorIndex) {
   std::vector<glm::vec<N_Components, T_Component, glm::defaultp>> data(accessor.count);
   const unsigned char *bufferData =
       buffer.data.data() + bufferView.byteOffset + accessor.byteOffset;
-  size_t componentSize = gltfm::GetComponentSizeInBytes(accessor.componentType);
-  size_t numComponentsPerElement = gltfm::GetNumComponentsInType(accessor.type);
+  size_t componentSize = gltfm::getComponentSizeInBytes(accessor.componentType);
+  size_t numComponentsPerElement = gltfm::getNumComponentsInType(accessor.type);
 
-  if (numComponentsPerElement != N_Components) {
+  if (std::cmp_not_equal(numComponentsPerElement, N_Components)) {
     return std::unexpected("Accessor component count mismatch.");
   }
 
@@ -133,21 +133,21 @@ getIndexAccessorData(const gltfm::Model &model, int accessorIndex) {
   std::vector<u32> indices(accessor.count);
   size_t stride = accessor.ByteStride(bufferView);
   if (stride == 0) {
-    stride = gltfm::GetComponentSizeInBytes(accessor.componentType);
+    stride = gltfm::getComponentSizeInBytes(accessor.componentType);
   }
 
   for (size_t i = 0; i < accessor.count; ++i) {
     const unsigned char *elementData = bufferData + (i * stride);
     if (accessor.componentType == gltfm::COMPONENT_TYPE_UNSIGNED_INT) {
-      u32 val;
+      u32 val = 0;
       std::memcpy(&val, elementData, sizeof(u32));
       indices[i] = val;
     } else if (accessor.componentType == gltfm::COMPONENT_TYPE_UNSIGNED_SHORT) {
-      uint16_t val;
+      uint16_t val = 0;
       std::memcpy(&val, elementData, sizeof(uint16_t));
       indices[i] = static_cast<u32>(val);
     } else if (accessor.componentType == gltfm::COMPONENT_TYPE_UNSIGNED_BYTE) {
-      uint8_t val;
+      uint8_t val = 0;
       std::memcpy(&val, elementData, sizeof(uint8_t));
       indices[i] = static_cast<u32>(val);
     } else {
@@ -162,8 +162,8 @@ void generateTangents(std::vector<Vertex> &vertices, const std::vector<u32> &ind
     return;
   }
 
-  std::vector<glm::vec3> temp_tangents(vertices.size(), glm::vec3(0.0));
-  std::vector<glm::vec3> temp_bitangents(vertices.size(), glm::vec3(0.0));
+  std::vector<glm::vec3> tempTangents(vertices.size(), glm::vec3(0.0));
+  std::vector<glm::vec3> tempBitangents(vertices.size(), glm::vec3(0.0));
 
   for (size_t i = 0; i < indices.size(); i += 3) {
     Vertex &vertex0 = vertices[indices[i + 0]];
@@ -191,21 +191,21 @@ void generateTangents(std::vector<Vertex> &vertices, const std::vector<u32> &ind
     bitangent.y = factor * (-deltaUV2.x * edge1.y + deltaUV1.x * edge2.y);
     bitangent.z = factor * (-deltaUV2.x * edge1.z + deltaUV1.x * edge2.z);
 
-    temp_tangents[indices[i + 0]] += tangent;
-    temp_tangents[indices[i + 1]] += tangent;
-    temp_tangents[indices[i + 2]] += tangent;
+    tempTangents[indices[i + 0]] += tangent;
+    tempTangents[indices[i + 1]] += tangent;
+    tempTangents[indices[i + 2]] += tangent;
 
-    temp_bitangents[indices[i + 0]] += bitangent;
-    temp_bitangents[indices[i + 1]] += bitangent;
-    temp_bitangents[indices[i + 2]] += bitangent;
+    tempBitangents[indices[i + 0]] += bitangent;
+    tempBitangents[indices[i + 1]] += bitangent;
+    tempBitangents[indices[i + 2]] += bitangent;
   }
 
   // MODIFIED: More robust finalization of tangents
   for (size_t i = 0; i < vertices.size(); ++i) {
     Vertex &currentVertex = vertices[i];
     const glm::vec3 &normal = currentVertex.normal;
-    const glm::vec3 &t_accum = temp_tangents[i];
-    const glm::vec3 &b_accum = temp_bitangents[i];
+    const glm::vec3 &tAccum = tempTangents[i];
+    const glm::vec3 &bAccum = tempBitangents[i];
 
     // Gram-Schmidt orthogonalize: T' = normalize(T - (T . N) * N)
     // glm::vec3 tangent = t_accum - normal * glm::dot(normal, t_accum);
@@ -221,10 +221,10 @@ void generateTangents(std::vector<Vertex> &vertices, const std::vector<u32> &ind
     //   // Fallback for when tangent is zero or too small.
     //   // Create an arbitrary but valid tangent.
     //   // This is a common technique using the cross product to find a perpendicular vector.
-    glm::vec3 axis =
-        (std::abs(normal.x) > std::abs(normal.z)) ? glm::vec3(0.0, 1.0, 0.0) : glm::vec3(1.0, 0.0, 0.0);
-    glm::vec3 fallback_t = glm::normalize(glm::cross(normal, axis));
-    currentVertex.tangent = glm::vec4(fallback_t, 1.0);
+    glm::vec3 axis = (std::abs(normal.x) > std::abs(normal.z)) ? glm::vec3(0.0, 1.0, 0.0)
+                                                               : glm::vec3(1.0, 0.0, 0.0);
+    glm::vec3 fallbackT = glm::normalize(glm::cross(normal, axis));
+    currentVertex.tangent = glm::vec4(fallbackT, 1.0);
     // }
   }
 }
@@ -238,7 +238,7 @@ loadGltfFile(const std::string &filePath, const std::string &baseDir = "") {
   std::string warn;
   LoadedGltfScene loadedScene;
 
-  bool ret;
+  bool ret = false;
   if (filePath.size() > 4 && filePath.substr(filePath.size() - 4) == ".glb") {
     ret = loader.LoadBinaryFromFile(&model, &err, &warn, filePath);
   } else {
@@ -260,13 +260,13 @@ loadGltfFile(const std::string &filePath, const std::string &baseDir = "") {
     const auto &gltfImage = model.images[i];
     GltfImageData imageData;
     if (gltfImage.name.empty()) {
-        if (gltfImage.uri.empty()) {
-            imageData.name = "Image_" + std::to_string(i);
-        } else {
-            imageData.name = gltfImage.uri;
-        }
+      if (gltfImage.uri.empty()) {
+        imageData.name = "Image_" + std::to_string(i);
+      } else {
+        imageData.name = gltfImage.uri;
+      }
     } else {
-        imageData.name = gltfImage.name;
+      imageData.name = gltfImage.name;
     }
 
     if (!gltfImage.uri.empty() && gltfImage.bufferView == -1) { // External image
@@ -406,21 +406,20 @@ loadGltfFile(const std::string &filePath, const std::string &baseDir = "") {
         primitiveData.material.occlusionStrength = gltfMaterial.occlusionTexture.strength;
         primitiveData.material.emissiveFactor = glm::make_vec3(gltfMaterial.emissiveFactor.data());
 
-        auto get_image_index = [&](int texture_index) {
-          if (texture_index >= 0 && static_cast<size_t>(texture_index) < model.textures.size()) {
-            return model.textures[texture_index].source;
+        auto getImageIndex = [&](int textureIndex) {
+          if (textureIndex >= 0 && static_cast<size_t>(textureIndex) < model.textures.size()) {
+            return model.textures[textureIndex].source;
           }
           return -1;
         };
         // Texture index assignments...
-        primitiveData.baseColorTextureGltfIndex = get_image_index(pbr.baseColorTexture.index);
+        primitiveData.baseColorTextureGltfIndex = getImageIndex(pbr.baseColorTexture.index);
         primitiveData.metallicRoughnessTextureGltfIndex =
-            get_image_index(pbr.metallicRoughnessTexture.index);
-        primitiveData.normalTextureGltfIndex = get_image_index(gltfMaterial.normalTexture.index);
+            getImageIndex(pbr.metallicRoughnessTexture.index);
+        primitiveData.normalTextureGltfIndex = getImageIndex(gltfMaterial.normalTexture.index);
         primitiveData.occlusionTextureGltfIndex =
-            get_image_index(gltfMaterial.occlusionTexture.index);
-        primitiveData.emissiveTextureGltfIndex =
-            get_image_index(gltfMaterial.emissiveTexture.index);
+            getImageIndex(gltfMaterial.occlusionTexture.index);
+        primitiveData.emissiveTextureGltfIndex = getImageIndex(gltfMaterial.emissiveTexture.index);
 
       } else {
         primitiveData.material = Material{};
@@ -445,15 +444,18 @@ loadGltfFile(const std::string &filePath, const std::string &baseDir = "") {
       auto rotationMatrix = glm::mat4(1.0);
       auto scaleMatrix = glm::mat4(1.0);
       if (!gltfNode.translation.empty()) {
-        translationMatrix = glm::translate(translationMatrix, glm::vec3(gltfNode.translation[0], gltfNode.translation[1],
-                                        gltfNode.translation[2]));
+        translationMatrix = glm::translate(
+            translationMatrix,
+            glm::vec3(gltfNode.translation[0], gltfNode.translation[1], gltfNode.translation[2]));
       }
       if (!gltfNode.rotation.empty()) {
-        rotationMatrix = glm::mat4_cast(glm::quat(static_cast<float>(gltfNode.rotation[3]), static_cast<float>(gltfNode.rotation[0]),
-                                     static_cast<float>(gltfNode.rotation[1]), static_cast<float>(gltfNode.rotation[2])));
+        rotationMatrix = glm::mat4_cast(glm::quat(
+            static_cast<float>(gltfNode.rotation[3]), static_cast<float>(gltfNode.rotation[0]),
+            static_cast<float>(gltfNode.rotation[1]), static_cast<float>(gltfNode.rotation[2])));
       }
       if (!gltfNode.scale.empty()) {
-        scaleMatrix = glm::scale(scaleMatrix, glm::vec3(gltfNode.scale[0], gltfNode.scale[1], gltfNode.scale[2]));
+        scaleMatrix = glm::scale(
+            scaleMatrix, glm::vec3(gltfNode.scale[0], gltfNode.scale[1], gltfNode.scale[2]));
       }
       nodeData.transform = translationMatrix * rotationMatrix * scaleMatrix;
     }

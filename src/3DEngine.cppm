@@ -27,13 +27,13 @@ import :VMA;
 
 namespace { // Anonymous namespace for internal helpers
 std::vector<Vertex> createAxisLineVertices(const glm::vec3 &start, const glm::vec3 &end,
-                                           const glm::vec3 &normal_placeholder) {
+                                           const glm::vec3 &normalPlaceholder) {
   return {{.pos = start,
-           .normal = normal_placeholder,
+           .normal = normalPlaceholder,
            .uv = {0.0, 0.0},
            .tangent = {1.0, 0.0, 0.0, 1.0}},
           {.pos = end,
-           .normal = normal_placeholder,
+           .normal = normalPlaceholder,
            .uv = {1.0, 0.0},
            .tangent = {1.0, 0.0, 0.0, 1.0}}};
 }
@@ -42,42 +42,42 @@ std::vector<u32> createAxisLineIndices() { return {0, 1}; }
 
 export class ThreeDEngine {
 private:
-  VulkanDevice &device_;
-  u32 frameCount_;
-  BS::thread_pool<> &thread_pool_; // Reference to the shared thread pool
+  VulkanDevice &m_device;
+  u32 m_frameCount;
+  BS::thread_pool<> &m_thread_pool; // Reference to the shared thread pool
 
   // Rendering Resources
-  std::vector<VulkanPipeline> graphicsPipelines_;
-  vk::raii::DescriptorSetLayout combinedMeshLayout_{nullptr};
-  vk::raii::DescriptorSetLayout sceneLayout_{nullptr};
-  std::vector<vk::raii::DescriptorSet> sceneDescriptorSets_;
+  std::vector<VulkanPipeline> m_graphicsPipelines;
+  vk::raii::DescriptorSetLayout m_combinedMeshLayout{nullptr};
+  vk::raii::DescriptorSetLayout m_sceneLayout{nullptr};
+  std::vector<vk::raii::DescriptorSet> m_sceneDescriptorSets;
 
   // UBOs
-  std::vector<VmaBuffer> sceneLightsUbos_;
-  SceneLightsUBO sceneLightsCpuBuffer_;
-  std::vector<VmaBuffer> shaderTogglesUbos_;
-  ShaderTogglesUBO shaderTogglesCpuBuffer_;
+  std::vector<VmaBuffer> m_sceneLightsUbos;
+  SceneLightsUBO m_sceneLightsCpuBuffer{};
+  std::vector<VmaBuffer> m_shaderTogglesUbos;
+  ShaderTogglesUBO m_shaderTogglesCpuBuffer;
 
   // Scene and Assets
-  Scene scene_;
-  std::unique_ptr<TextureStore> textureStore_;
-  std::vector<std::unique_ptr<Mesh>> appOwnedMeshes_;
-  Camera camera_;
+  Scene m_scene;
+  std::unique_ptr<TextureStore> m_textureStore;
+  std::vector<std::unique_ptr<Mesh>> m_appOwnedMeshes;
+  Camera m_camera;
 
   // Model Loading
-  std::vector<LoadedGltfScene> loadedGltfData_;
-  std::mutex loadedGltfDataMutex_;
+  std::vector<LoadedGltfScene> m_loadedGltfData;
+  std::mutex m_loadedGltfDataMutex;
 
 public:
-  ThreeDEngine(VulkanDevice &device, u32 frameCount, BS::thread_pool<> &thread_pool)
-      : device_(device), frameCount_(frameCount), thread_pool_(thread_pool), scene_(frameCount) {
-    textureStore_ = std::make_unique<TextureStore>(device, device.queue_);
+  ThreeDEngine(VulkanDevice &device, u32 frameCount, BS::thread_pool<> &threadPool)
+      : m_device(device), m_frameCount(frameCount), m_thread_pool(threadPool), m_scene(frameCount) {
+    m_textureStore = std::make_unique<TextureStore>(device, device.queue);
   }
   // --- Public API ---
 
   std::expected<void, std::string> initialize(const vk::raii::RenderPass &renderPass,
                                               const vk::raii::PipelineCache &pipelineCache) {
-    EXPECTED_VOID(textureStore_->createDefaultTextures());
+    EXPECTED_VOID(m_textureStore->createDefaultTextures());
     EXPECTED_VOID(createDescriptorSetLayouts());
     EXPECTED_VOID(createGraphicsPipelines(renderPass, pipelineCache));
     EXPECTED_VOID(setupSceneLights());
@@ -95,49 +95,49 @@ public:
   }
 
   void update(u32 frameIndex, float deltaTime, vk::Extent2D swapchainExtent) {
-    camera_.updateVectors();
-    scene_.updateHierarchy(frameIndex, camera_.GetViewMatrix(),
-                           camera_.GetProjectionMatrix(static_cast<float>(swapchainExtent.width) /
+    m_camera.updateVectors();
+    m_scene.updateHierarchy(frameIndex, m_camera.getViewMatrix(),
+                           m_camera.getProjectionMatrix(static_cast<float>(swapchainExtent.width) /
                                                        static_cast<float>(swapchainExtent.height)),
                            deltaTime);
-    scene_.updateAllDescriptorSetContents(frameIndex);
+    m_scene.updateAllDescriptorSetContents(frameIndex);
 
     // Update UBOs
-    std::memcpy(sceneLightsUbos_[frameIndex].getMappedData(), &sceneLightsCpuBuffer_,
+    std::memcpy(m_sceneLightsUbos[frameIndex].getMappedData(), &m_sceneLightsCpuBuffer,
                 sizeof(SceneLightsUBO));
-    std::memcpy(shaderTogglesUbos_[frameIndex].getMappedData(), &shaderTogglesCpuBuffer_,
+    std::memcpy(m_shaderTogglesUbos[frameIndex].getMappedData(), &m_shaderTogglesCpuBuffer,
                 sizeof(ShaderTogglesUBO));
 
     // Update descriptor sets for scene-wide data
     vk::DescriptorBufferInfo lightUboInfo{
-        .buffer = sceneLightsUbos_[frameIndex].get(), .offset = 0, .range = sizeof(SceneLightsUBO)};
-    vk::DescriptorBufferInfo togglesUboInfo{.buffer = shaderTogglesUbos_[frameIndex].get(),
+        .buffer = m_sceneLightsUbos[frameIndex].get(), .offset = 0, .range = sizeof(SceneLightsUBO)};
+    vk::DescriptorBufferInfo togglesUboInfo{.buffer = m_shaderTogglesUbos[frameIndex].get(),
                                             .offset = 0,
                                             .range = sizeof(ShaderTogglesUBO)};
     std::array<vk::WriteDescriptorSet, 2> writeInfos = {
-        vk::WriteDescriptorSet{.dstSet = *sceneDescriptorSets_[frameIndex],
+        vk::WriteDescriptorSet{.dstSet = *m_sceneDescriptorSets[frameIndex],
                                .dstBinding = 0,
                                .descriptorCount = 1,
                                .descriptorType = vk::DescriptorType::eUniformBuffer,
                                .pBufferInfo = &lightUboInfo},
-        vk::WriteDescriptorSet{.dstSet = *sceneDescriptorSets_[frameIndex],
+        vk::WriteDescriptorSet{.dstSet = *m_sceneDescriptorSets[frameIndex],
                                .dstBinding = 1,
                                .descriptorCount = 1,
                                .descriptorType = vk::DescriptorType::eUniformBuffer,
                                .pBufferInfo = &togglesUboInfo}};
-    device_.logical().updateDescriptorSets(writeInfos, nullptr);
+    m_device.logical().updateDescriptorSets(writeInfos, nullptr);
   }
 
   void draw(vk::raii::CommandBuffer &cmd, u32 frameIndex) {
-    if (graphicsPipelines_.empty() || !*graphicsPipelines_[0].pipelineLayout) {
+    if (m_graphicsPipelines.empty() || !*m_graphicsPipelines[0].pipelineLayout) {
       return;
     }
 
-    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *graphicsPipelines_[0].pipelineLayout,
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *m_graphicsPipelines[0].pipelineLayout,
                            1, // firstSet = 1
-                           {*sceneDescriptorSets_[frameIndex]}, {});
+                           {*m_sceneDescriptorSets[frameIndex]}, {});
 
-    scene_.draw(cmd, frameIndex);
+    m_scene.draw(cmd, frameIndex);
   }
 
   void processGltfLoads() {
@@ -148,8 +148,8 @@ public:
   }
 
   void onSwapchainRecreated(u32 newFrameCount) {
-    frameCount_ = newFrameCount;
-    scene_.setImageCount(newFrameCount, device_.descriptorPool_, combinedMeshLayout_);
+    m_frameCount = newFrameCount;
+    m_scene.setImageCount(newFrameCount, m_device.descriptorPool, m_combinedMeshLayout);
     // Re-create frame-dependent resources
     setupSceneLights();
     setupShaderToggles();
@@ -157,10 +157,10 @@ public:
   }
 
   // --- Getters for UI ---
-  Camera &getCamera() { return camera_; }
-  Scene &getScene() { return scene_; }
-  ShaderTogglesUBO &getShaderToggles() { return shaderTogglesCpuBuffer_; }
-  SceneLightsUBO &getLightUbo() { return sceneLightsCpuBuffer_; }
+  Camera &getCamera() { return m_camera; }
+  Scene &getScene() { return m_scene; }
+  ShaderTogglesUBO &getShaderToggles() { return m_shaderTogglesCpuBuffer; }
+  SceneLightsUBO &getLightUbo() { return m_sceneLightsCpuBuffer; }
 
 private:
   // --- Private Methods ---
@@ -199,12 +199,12 @@ private:
     vk::DescriptorSetLayoutCreateInfo layoutInfo{.bindingCount =
                                                      static_cast<u32>(meshDataBindings.size()),
                                                  .pBindings = meshDataBindings.data()};
-    auto layoutResult = device_.logical().createDescriptorSetLayout(layoutInfo);
+    auto layoutResult = m_device.logical().createDescriptorSetLayout(layoutInfo);
     if (!layoutResult) {
       return std::unexpected("Failed to create combined mesh descriptor set layout: " +
                              vk::to_string(layoutResult.error()));
     }
-    combinedMeshLayout_ = std::move(layoutResult.value());
+    m_combinedMeshLayout = std::move(layoutResult.value());
 
     std::vector<vk::DescriptorSetLayoutBinding> sceneDataBindings = {
         {.binding = 0,
@@ -219,29 +219,29 @@ private:
     vk::DescriptorSetLayoutCreateInfo sceneLayoutInfo{
         .bindingCount = static_cast<u32>(sceneDataBindings.size()),
         .pBindings = sceneDataBindings.data()};
-    auto sceneLayoutResult = device_.logical().createDescriptorSetLayout(sceneLayoutInfo);
+    auto sceneLayoutResult = m_device.logical().createDescriptorSetLayout(sceneLayoutInfo);
     if (!sceneLayoutResult) {
       return std::unexpected("Failed to create scene descriptor set layout: " +
                              vk::to_string(sceneLayoutResult.error()));
     }
-    sceneLayout_ = std::move(sceneLayoutResult.value());
+    m_sceneLayout = std::move(sceneLayoutResult.value());
 
     return {};
   }
 
   void allocateSceneDescriptorSets() {
-    std::vector<vk::DescriptorSetLayout> layouts(frameCount_, *sceneLayout_);
-    vk::DescriptorSetAllocateInfo allocInfo{.descriptorPool = *device_.descriptorPool_,
-                                            .descriptorSetCount = frameCount_,
+    std::vector<vk::DescriptorSetLayout> layouts(m_frameCount, *m_sceneLayout);
+    vk::DescriptorSetAllocateInfo allocInfo{.descriptorPool = *m_device.descriptorPool,
+                                            .descriptorSetCount = m_frameCount,
                                             .pSetLayouts = layouts.data()};
-    sceneDescriptorSets_ = device_.logical().allocateDescriptorSets(allocInfo).value();
+    m_sceneDescriptorSets = m_device.logical().allocateDescriptorSets(allocInfo).value();
   }
 
   std::expected<void, std::string>
   createGraphicsPipelines(const vk::raii::RenderPass &renderPass,
                           const vk::raii::PipelineCache &pipelineCache) {
-    if (graphicsPipelines_.empty()) {
-      graphicsPipelines_.resize(2);
+    if (m_graphicsPipelines.empty()) {
+      m_graphicsPipelines.resize(2);
     }
 
     vk::VertexInputBindingDescription bindingDescription{
@@ -278,12 +278,12 @@ private:
         .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
                           vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA};
 
-    VulkanPipeline &mainPipeline = graphicsPipelines_[0];
-    std::vector<vk::DescriptorSetLayout> layouts = {*combinedMeshLayout_, *sceneLayout_};
-    EXPECTED_VOID(mainPipeline.createPipelineLayout(device_.logical(), layouts, {}));
+    VulkanPipeline &mainPipeline = m_graphicsPipelines[0];
+    std::vector<vk::DescriptorSetLayout> layouts = {*m_combinedMeshLayout, *m_sceneLayout};
+    EXPECTED_VOID(mainPipeline.createPipelineLayout(m_device.logical(), layouts, {}));
 
-    auto vertShaderModule = createShaderModuleFromFile(device_.logical(), "shaders/vert.spv");
-    auto fragShaderModule = createShaderModuleFromFile(device_.logical(), "shaders/frag.spv");
+    auto vertShaderModule = createShaderModuleFromFile(m_device.logical(), "shaders/vert.spv");
+    auto fragShaderModule = createShaderModuleFromFile(m_device.logical(), "shaders/frag.spv");
     if (!vertShaderModule || !fragShaderModule) {
       return std::unexpected("Failed to load 3D shaders.");
     }
@@ -299,15 +299,15 @@ private:
     vk::PipelineInputAssemblyStateCreateInfo inputAssembly{
         .topology = vk::PrimitiveTopology::eTriangleList};
     EXPECTED_VOID(mainPipeline.createGraphicsPipeline(
-        device_.logical(), pipelineCache, shaderStages, vertexInputInfo, inputAssembly, renderPass,
+        m_device.logical(), pipelineCache, shaderStages, vertexInputInfo, inputAssembly, renderPass,
         &colorBlendAttachment, &depthStencilState));
 
-    VulkanPipeline &linePipeline = graphicsPipelines_[1];
-    EXPECTED_VOID(linePipeline.createPipelineLayout(device_.logical(), layouts, {}));
+    VulkanPipeline &linePipeline = m_graphicsPipelines[1];
+    EXPECTED_VOID(linePipeline.createPipelineLayout(m_device.logical(), layouts, {}));
     vk::PipelineInputAssemblyStateCreateInfo lineInputAssembly{
         .topology = vk::PrimitiveTopology::eLineList};
     EXPECTED_VOID(linePipeline.createGraphicsPipeline(
-        device_.logical(), pipelineCache, shaderStages, vertexInputInfo, lineInputAssembly,
+        m_device.logical(), pipelineCache, shaderStages, vertexInputInfo, lineInputAssembly,
         renderPass, &colorBlendAttachment, &depthStencilState));
 
     return {};
@@ -315,69 +315,69 @@ private:
 
   std::expected<void, std::string> setupShaderToggles() {
     vk::DeviceSize bufferSize = sizeof(ShaderTogglesUBO);
-    shaderTogglesUbos_.resize(frameCount_);
-    for (size_t i = 0; i < frameCount_; i++) {
+    m_shaderTogglesUbos.resize(m_frameCount);
+    for (size_t i = 0; i < m_frameCount; i++) {
       vk::BufferCreateInfo bufferInfo{.size = bufferSize,
                                       .usage = vk::BufferUsageFlagBits::eUniformBuffer};
       vma::AllocationCreateInfo allocInfo{
           .flags = vma::AllocationCreateFlagBits::eHostAccessSequentialWrite |
                    vma::AllocationCreateFlagBits::eMapped,
           .usage = vma::MemoryUsage::eAutoPreferHost};
-      auto bufferResult = device_.createBufferVMA(bufferInfo, allocInfo);
+      auto bufferResult = m_device.createBufferVMA(bufferInfo, allocInfo);
       if (!bufferResult) {
         return std::unexpected("Failed to create shader toggles UBO for frame " +
                                std::to_string(i));
       }
-      shaderTogglesUbos_[i] = std::move(bufferResult.value());
+      m_shaderTogglesUbos[i] = std::move(bufferResult.value());
     }
     return {};
   }
 
   std::expected<void, std::string> setupSceneLights() {
-    sceneLightsCpuBuffer_.lightCount = 2;
-    sceneLightsCpuBuffer_.lights[0].position = {-20.0, -20.0, -20.0, 1.0};
-    sceneLightsCpuBuffer_.lights[0].color = {150.0, 150.0, 150.0, 1.0};
-    sceneLightsCpuBuffer_.lights[1].position = {20.0, -30.0, -15.0, 1.0};
-    sceneLightsCpuBuffer_.lights[1].color = {200.0, 150.0, 50.0, 1.0};
+    m_sceneLightsCpuBuffer.lightCount = 2;
+    m_sceneLightsCpuBuffer.lights[0].position = {-20.0, -20.0, -20.0, 1.0};
+    m_sceneLightsCpuBuffer.lights[0].color = {150.0, 150.0, 150.0, 1.0};
+    m_sceneLightsCpuBuffer.lights[1].position = {20.0, -30.0, -15.0, 1.0};
+    m_sceneLightsCpuBuffer.lights[1].color = {200.0, 150.0, 50.0, 1.0};
 
     vk::DeviceSize bufferSize = sizeof(SceneLightsUBO);
-    sceneLightsUbos_.resize(frameCount_);
-    for (size_t i = 0; i < frameCount_; i++) {
+    m_sceneLightsUbos.resize(m_frameCount);
+    for (size_t i = 0; i < m_frameCount; i++) {
       vk::BufferCreateInfo bufferInfo{.size = bufferSize,
                                       .usage = vk::BufferUsageFlagBits::eUniformBuffer};
       vma::AllocationCreateInfo allocInfo{
           .flags = vma::AllocationCreateFlagBits::eHostAccessSequentialWrite |
                    vma::AllocationCreateFlagBits::eMapped,
           .usage = vma::MemoryUsage::eAutoPreferHost};
-      auto bufferResult = device_.createBufferVMA(bufferInfo, allocInfo);
+      auto bufferResult = m_device.createBufferVMA(bufferInfo, allocInfo);
       if (!bufferResult) {
         return std::unexpected("Failed to create light UBO for frame " + std::to_string(i));
       }
-      sceneLightsUbos_[i] = std::move(bufferResult.value());
+      m_sceneLightsUbos[i] = std::move(bufferResult.value());
     }
     return {};
   }
 
   void createDebugAxesScene() {
-    if (graphicsPipelines_.size() < 2 || !*graphicsPipelines_[1].pipeline) {
+    if (m_graphicsPipelines.size() < 2 || !*m_graphicsPipelines[1].pipeline) {
       return;
     }
 
-    VulkanPipeline *linePipeline = &graphicsPipelines_[1];
+    VulkanPipeline *linePipeline = &m_graphicsPipelines[1];
     float axisLength = 10000.0;
 
     auto createAxis = [&](const std::string &name, glm::vec3 start, glm::vec3 end,
                           std::array<u8, 4> color, glm::vec3 tangent) {
       Material axisMaterial;
-      PBRTextures axisTextures = textureStore_->getAllDefaultTextures();
-      axisTextures.baseColor = textureStore_->getColorTexture(color);
+      PBRTextures axisTextures = m_textureStore->getAllDefaultTextures();
+      axisTextures.baseColor = m_textureStore->getColorTexture(color);
       auto axisMesh =
-          std::make_unique<Mesh>(device_, name, createAxisLineVertices(start, end, tangent),
-                                 createAxisLineIndices(), axisMaterial, axisTextures, frameCount_);
-      appOwnedMeshes_.emplace_back(std::move(axisMesh));
-      scene_.createNode(
-          {.mesh = appOwnedMeshes_.back().get(), .pipeline = linePipeline, .name = name + "_Node"},
-          device_.descriptorPool_, combinedMeshLayout_);
+          std::make_unique<Mesh>(m_device, name, createAxisLineVertices(start, end, tangent),
+                                 createAxisLineIndices(), axisMaterial, axisTextures, m_frameCount);
+      m_appOwnedMeshes.emplace_back(std::move(axisMesh));
+      m_scene.createNode(
+          {.mesh = m_appOwnedMeshes.back().get(), .pipeline = linePipeline, .name = name + "_Node"},
+          m_device.descriptorPool, m_combinedMeshLayout);
     };
 
     createAxis("X_Axis", {-axisLength, 0, 0}, {axisLength, 0, 0}, {255, 0, 0, 255}, {0, 1, 0});
@@ -391,29 +391,29 @@ private:
       std::println("Failed to load GLTF file '{}': {}", filePath, loadedGltfDataResult.error());
       return;
     }
-    std::lock_guard lock{loadedGltfDataMutex_};
-    loadedGltfData_.emplace_back(*loadedGltfDataResult);
+    std::lock_guard lock{m_loadedGltfDataMutex};
+    m_loadedGltfData.emplace_back(*loadedGltfDataResult);
   }
 
   void instanceGltfModel(const LoadedGltfScene &gltfData) {
     auto builtMeshesResult =
-        populateSceneFromGltf(scene_, gltfData, device_, *textureStore_, graphicsPipelines_.data(),
-                              frameCount_, combinedMeshLayout_);
+        populateSceneFromGltf(m_scene, gltfData, m_device, *m_textureStore, m_graphicsPipelines.data(),
+                              m_frameCount, m_combinedMeshLayout);
     if (!builtMeshesResult) {
       std::println("Failed to build engine scene from GLTF data: {}", builtMeshesResult.error());
       return;
     }
-    for (auto &mesh_ptr : builtMeshesResult->engineMeshes) {
-      appOwnedMeshes_.emplace_back(std::move(mesh_ptr));
+    for (auto &meshPtr : builtMeshesResult->engineMeshes) {
+      m_appOwnedMeshes.emplace_back(std::move(meshPtr));
     }
   }
 
   std::vector<LoadedGltfScene> stealLoadedScenes() {
     std::vector<LoadedGltfScene> out;
     {
-      std::lock_guard lock{loadedGltfDataMutex_};
-      out = std::move(loadedGltfData_);
-      loadedGltfData_.clear();
+      std::lock_guard lock{m_loadedGltfDataMutex};
+      out = std::move(m_loadedGltfData);
+      m_loadedGltfData.clear();
     }
     return out;
   }

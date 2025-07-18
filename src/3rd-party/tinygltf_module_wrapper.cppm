@@ -73,10 +73,10 @@ using tinygltf::PerspectiveCamera;
 // using tinygltf::IsDataURI;
 // using tinygltf::DecodeDataURI;
 // For now, let's assume you might make them free functions or directly accessible:
-inline int GetComponentSizeInBytes(int componentType) {
+inline int getComponentSizeInBytes(int componentType) {
   return tinygltf::GetComponentSizeInBytes(componentType);
 }
-inline int GetNumComponentsInType(int type) { return tinygltf::GetNumComponentsInType(type); }
+inline int getNumComponentsInType(int type) { return tinygltf::GetNumComponentsInType(type); }
 
 // --- Enums and Constants (as constexpr or enum class for type safety) ---
 
@@ -136,13 +136,16 @@ constexpr int MATERIAL_ALPHA_MODE_BLEND = 2;  // String "BLEND"
 // You'd typically compare material.alphaMode == "OPAQUE" etc.
 // Or define your own enum class for these and convert from string.
 enum class AlphaMode { OPAQUE, MASK, BLEND, UNKNOWN };
-inline AlphaMode FromString(const std::string &s) {
-  if (s == "OPAQUE")
+inline AlphaMode fromString(const std::string &s) {
+  if (s == "OPAQUE") {
     return AlphaMode::OPAQUE;
-  if (s == "MASK")
+}
+  if (s == "MASK") {
     return AlphaMode::MASK;
-  if (s == "BLEND")
+}
+  if (s == "BLEND") {
     return AlphaMode::BLEND;
+}
   return AlphaMode::UNKNOWN;
 }
 
@@ -179,11 +182,13 @@ constexpr int ELEMENT_ARRAY_BUFFER = TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER; // 34
 // const std::string CAMERA_TYPE_ORTHOGRAPHIC = "orthographic";
 // Similar to AlphaMode, you'd compare camera.type string or convert to an enum.
 enum class CameraType { PERSPECTIVE, ORTHOGRAPHIC, UNKNOWN };
-inline CameraType CameraTypeFromString(const std::string &s) {
-  if (s == "perspective")
+inline CameraType cameraTypeFromString(const std::string &s) {
+  if (s == "perspective") {
     return CameraType::PERSPECTIVE;
-  if (s == "orthographic")
+}
+  if (s == "orthographic") {
     return CameraType::ORTHOGRAPHIC;
+}
   return CameraType::UNKNOWN;
 }
 

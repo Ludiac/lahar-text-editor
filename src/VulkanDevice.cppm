@@ -19,26 +19,26 @@ export struct BufferResources {
 
 export struct VulkanDevice {
 private:
-  vk::raii::PhysicalDevice physicalDevice_{nullptr};
-  vk::raii::Device device_{nullptr};
-  const vk::raii::Instance &instance_;
-  vma::Allocator vmaAllocator_;
-  vk::raii::CommandPool transientCommandPool_{nullptr};
+  vk::raii::PhysicalDevice m_physicalDevice{nullptr};
+  vk::raii::Device m_device{nullptr};
+  const vk::raii::Instance &m_instance;
+  vma::Allocator m_vmaAllocator;
+  vk::raii::CommandPool m_transientCommandPool{nullptr};
 
 public:
   vk::PhysicalDeviceLimits limits;
-  u32 queueFamily_ = (u32)-1;
-  vk::raii::Queue queue_{nullptr};
-  vk::raii::DescriptorPool descriptorPool_{nullptr};
+  u32 queueFamily = (u32)-1;
+  vk::raii::Queue queue{nullptr};
+  vk::raii::DescriptorPool descriptorPool{nullptr};
 
-  VulkanDevice(const vk::raii::Instance &instance) : instance_(instance) {}
+  VulkanDevice(const vk::raii::Instance &instance) : m_instance(instance) {}
 
 private:
-  static u32 selectQueueFamilyIndex(const vk::raii::PhysicalDevice &physical_device) {
-    auto queue_family_properties = physical_device.getQueueFamilyProperties();
+  static u32 selectQueueFamilyIndex(const vk::raii::PhysicalDevice &physicalDevice) {
+    auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
 
-    for (u32 i = 0; i < queue_family_properties.size(); i++) {
-      if (queue_family_properties[i].queueFlags & vk::QueueFlagBits::eGraphics) {
+    for (u32 i = 0; i < queueFamilyProperties.size(); i++) {
+      if (queueFamilyProperties[i].queueFlags & vk::QueueFlagBits::eGraphics) {
         return i;
       }
     }
@@ -47,30 +47,30 @@ private:
   }
 
 public:
-  [[nodiscard]] const vk::raii::Device &logical() const { return device_; }
-  [[nodiscard]] const vk::raii::PhysicalDevice &physical() const { return physicalDevice_; }
-  [[nodiscard]] const vma::Allocator &allocator() const { return vmaAllocator_; }
+  [[nodiscard]] const vk::raii::Device &logical() const { return m_device; }
+  [[nodiscard]] const vk::raii::PhysicalDevice &physical() const { return m_physicalDevice; }
+  [[nodiscard]] const vma::Allocator &allocator() const { return m_vmaAllocator; }
 
-  ~VulkanDevice() { vmaAllocator_.destroy(); }
+  ~VulkanDevice() { m_vmaAllocator.destroy(); }
 
-  ImGui_ImplVulkan_InitInfo init_info() {
+  ImGui_ImplVulkan_InitInfo initInfo() {
     return ImGui_ImplVulkan_InitInfo{
-        .PhysicalDevice = *physicalDevice_,
-        .Device = *device_,
-        .QueueFamily = queueFamily_,
-        .Queue = *queue_,
-        .DescriptorPool = *descriptorPool_,
+        .PhysicalDevice = *m_physicalDevice,
+        .Device = *m_device,
+        .QueueFamily = queueFamily,
+        .Queue = *queue,
+        .DescriptorPool = *descriptorPool,
     };
   }
 
   [[nodiscard]] std::expected<void, std::string> pickPhysicalDevice() {
-    auto expected = instance_.enumeratePhysicalDevices();
+    auto expected = m_instance.enumeratePhysicalDevices();
     if (expected) {
       if (expected->empty()) {
         return std::unexpected("No Vulkan-compatible physical devices found!");
       }
-      physicalDevice_ = std::move(expected->front());
-      limits = physicalDevice_.getProperties().limits;
+      m_physicalDevice = std::move(expected->front());
+      limits = m_physicalDevice.getProperties().limits;
       return {};
     }
     return std::unexpected("Failed to enumerate physical devices: " +
@@ -78,8 +78,8 @@ public:
   }
 
   [[nodiscard]] std::expected<void, std::string> createLogicalDevice() {
-    queueFamily_ = selectQueueFamilyIndex(physicalDevice_);
-    if (queueFamily_ == (u32)-1) {
+    queueFamily = selectQueueFamilyIndex(m_physicalDevice);
+    if (std::cmp_equal(queueFamily, -1)) {
       return std::unexpected("Failed to select queue family index");
     }
 
@@ -87,36 +87,36 @@ public:
     deviceExtensions.push_back(vk::KHRSwapchainExtensionName);
     deviceExtensions.push_back(vk::KHRMapMemory2ExtensionName);
 
-    u32 properties_count;
+    u32 propertiesCount = 0;
     std::vector<vk::ExtensionProperties> properties =
-        physicalDevice_.enumerateDeviceExtensionProperties();
+        m_physicalDevice.enumerateDeviceExtensionProperties();
 
-    const float queue_priority[] = {1.0};
-    vk::DeviceQueueCreateInfo queue_info[1] = {};
-    queue_info[0].queueFamilyIndex = queueFamily_;
-    queue_info[0].queueCount = 1;
-    queue_info[0].pQueuePriorities = queue_priority;
+    const float QUEUE_PRIORITY[] = {1.0};
+    vk::DeviceQueueCreateInfo queueInfo[1] = {};
+    queueInfo[0].queueFamilyIndex = queueFamily;
+    queueInfo[0].queueCount = 1;
+    queueInfo[0].pQueuePriorities = QUEUE_PRIORITY;
 
     vk::PhysicalDeviceFeatures enabledFeatures{};
     vk::PhysicalDeviceVulkan11Features enabledFeatures11{
         .shaderDrawParameters = vk::True,
     };
     enabledFeatures.samplerAnisotropy = vk::True;
-    if (auto expected = physicalDevice_.createDevice({
+    if (auto expected = m_physicalDevice.createDevice({
             .pNext = &enabledFeatures11,
-            .queueCreateInfoCount = sizeof(queue_info) / sizeof(queue_info[0]),
-            .pQueueCreateInfos = queue_info,
+            .queueCreateInfoCount = sizeof(queueInfo) / sizeof(queueInfo[0]),
+            .pQueueCreateInfos = queueInfo,
             .enabledExtensionCount = static_cast<u32>(deviceExtensions.size()),
             .ppEnabledExtensionNames = deviceExtensions.data(),
             .pEnabledFeatures = &enabledFeatures,
         });
         expected) {
-      device_ = std::move(*expected);
+      m_device = std::move(*expected);
     } else {
       return std::unexpected(std::format("error with device {}", vk::to_string(expected.error())));
     }
-    if (auto expected = device_.getQueue(queueFamily_, 0); expected) {
-      queue_ = std::move(*expected);
+    if (auto expected = m_device.getQueue(queueFamily, 0); expected) {
+      queue = std::move(*expected);
     } else {
       return std::unexpected(std::format("error with queue {}", vk::to_string(expected.error())));
     }
@@ -124,69 +124,69 @@ public:
     vk::CommandPoolCreateInfo poolCreateInfo{.flags =
                                                  vk::CommandPoolCreateFlagBits::eTransient |
                                                  vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-                                             .queueFamilyIndex = queueFamily_};
-    auto transientPoolResult = device_.createCommandPool(poolCreateInfo);
+                                             .queueFamilyIndex = queueFamily};
+    auto transientPoolResult = m_device.createCommandPool(poolCreateInfo);
     if (!transientPoolResult) {
       return std::unexpected("Failed to create transient command pool: " +
                              vk::to_string(transientPoolResult.error()));
     }
-    transientCommandPool_ = std::move(transientPoolResult.value());
+    m_transientCommandPool = std::move(transientPoolResult.value());
 
-    if (auto expected = createVmaAllocator(instance_, physicalDevice_, device_); expected) {
-      vmaAllocator_ = *expected;
+    if (auto expected = createVmaAllocator(m_instance, m_physicalDevice, m_device); expected) {
+      m_vmaAllocator = *expected;
       return {};
     }
     return std::unexpected(std::format("Failed to create Vma allocator:"));
   }
 
   [[nodiscard]] std::expected<void, std::string> createDescriptorPool(u32 imageCountBasedFactor) {
-    if (!*device_) {
+    if (!*m_device) {
       return std::unexpected("VulkanDevice::createDescriptorPool: Logical device is null. Call "
                              "createLogicalDevice first.");
     }
 
-    u32 app_uniform_buffers = imageCountBasedFactor;
-    u32 app_dynamic_uniform_buffers = imageCountBasedFactor;
-    u32 app_combined_image_samplers = imageCountBasedFactor;
+    u32 appUniformBuffers = imageCountBasedFactor;
+    u32 appDynamicUniformBuffers = imageCountBasedFactor;
+    u32 appCombinedImageSamplers = imageCountBasedFactor;
 
     std::vector<vk::DescriptorPoolSize> pool_sizes = {
-        {.type = vk::DescriptorType::eUniformBuffer, .descriptorCount = app_uniform_buffers},
+        {.type = vk::DescriptorType::eUniformBuffer, .descriptorCount = appUniformBuffers},
         {.type = vk::DescriptorType::eUniformBufferDynamic,
-         .descriptorCount = app_dynamic_uniform_buffers},
+         .descriptorCount = appDynamicUniformBuffers},
         {.type = vk::DescriptorType::eCombinedImageSampler,
          .descriptorCount =
-             app_combined_image_samplers + IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE},
+             appCombinedImageSamplers + IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE},
         {.type = vk::DescriptorType::eStorageBuffer, .descriptorCount = 30},
         {.type = vk::DescriptorType::eStorageBufferDynamic, .descriptorCount = 10},
     };
 
-    u32 application_max_sets = imageCountBasedFactor * 2;
+    u32 applicationMaxSets = imageCountBasedFactor * 2;
 
-    u32 imgui_estimated_sets = 10;
+    u32 imguiEstimatedSets = 10;
 
-    vk::DescriptorPoolCreateInfo pool_info{.flags =
-                                               vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-                                           .maxSets = application_max_sets + imgui_estimated_sets,
-                                           .poolSizeCount = static_cast<u32>(pool_sizes.size()),
-                                           .pPoolSizes = pool_sizes.data()};
+    vk::DescriptorPoolCreateInfo poolInfo{.flags =
+                                              vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+                                          .maxSets = applicationMaxSets + imguiEstimatedSets,
+                                          .poolSizeCount = static_cast<u32>(pool_sizes.size()),
+                                          .pPoolSizes = pool_sizes.data()};
 
-    if (*descriptorPool_) {
+    if (*descriptorPool) {
       // Consider device.waitIdle() here if descriptor sets from the old pool might still be in use.
       // For simplicity, assuming this is called during setup or a controlled resize.
-      descriptorPool_.clear();
+      descriptorPool.clear();
     }
 
-    auto poolResult = device_.createDescriptorPool(pool_info);
+    auto poolResult = m_device.createDescriptorPool(poolInfo);
     if (!poolResult) {
       return std::unexpected(
           std::format("VulkanDevice::createDescriptorPool: Failed to create descriptor pool: {} - "
                       "MaxSets: {}, PoolSizes: UBOs({}), DynUBOs({}), Samplers({})",
-                      vk::to_string(poolResult.error()), pool_info.maxSets,
-                      (pool_sizes.size() > 0 ? pool_sizes[0].descriptorCount : 0),
+                      vk::to_string(poolResult.error()), poolInfo.maxSets,
+                      (!pool_sizes.empty() ? pool_sizes[0].descriptorCount : 0),
                       (pool_sizes.size() > 1 ? pool_sizes[1].descriptorCount : 0),
                       (pool_sizes.size() > 2 ? pool_sizes[2].descriptorCount : 0)));
     }
-    descriptorPool_ = std::move(poolResult.value());
+    descriptorPool = std::move(poolResult.value());
     return {};
   }
 
@@ -195,23 +195,23 @@ public:
                vk::MemoryPropertyFlags memoryProperties) NOEXCEPT {
     BufferResources resources;
 
-    if (auto buf = device_.createBuffer(
+    if (auto buf = m_device.createBuffer(
             {.size = size, .usage = usage, .sharingMode = vk::SharingMode::eExclusive})) {
       resources.buffer = std::move(*buf);
     } else {
       return std::unexpected("Buffer creation failed: " + vk::to_string(buf.error()));
     }
 
-    auto memReqs = device_.getBufferMemoryRequirements2({.buffer = resources.buffer});
-    u32 memType;
-    if (auto memTypeExp = findMemoryType(physicalDevice_, memReqs.memoryRequirements.memoryTypeBits,
-                                         memoryProperties)) {
+    auto memReqs = m_device.getBufferMemoryRequirements2({.buffer = resources.buffer});
+    u32 memType = 0;
+    if (auto memTypeExp = findMemoryType(
+            m_physicalDevice, memReqs.memoryRequirements.memoryTypeBits, memoryProperties)) {
       memType = *memTypeExp;
     } else {
       return std::unexpected(memTypeExp.error());
     }
 
-    if (auto mem = device_.allocateMemory(
+    if (auto mem = m_device.allocateMemory(
             {.allocationSize = memReqs.memoryRequirements.size, .memoryTypeIndex = memType})) {
       resources.memory = std::move(*mem);
     } else {
@@ -224,65 +224,65 @@ public:
   [[nodiscard]] std::expected<VmaBuffer, std::string>
   createBufferVMA(const vk::BufferCreateInfo &bufferCreateInfo,
                   const vma::AllocationCreateInfo &allocationCreateInfo) NOEXCEPT {
-    if (!vmaAllocator_) {
+    if (!m_vmaAllocator) {
       return std::unexpected("VMA Allocator not initialized in VulkanDevice::createBufferVMA.");
     }
     if (bufferCreateInfo.size == 0) {
       return std::unexpected("VulkanDevice::createBufferVMA: Buffer size cannot be zero.");
     }
 
-    vk::BufferCreateInfo c_bufferCreateInfo = bufferCreateInfo;
-    vma::AllocationCreateInfo c_allocationCreateInfo = allocationCreateInfo;
+    vk::BufferCreateInfo cBufferCreateInfo = bufferCreateInfo;
+    vma::AllocationCreateInfo cAllocationCreateInfo = allocationCreateInfo;
 
     vk::Buffer outBuffer;
     vma::Allocation outAllocation;
     vma::AllocationInfo outAllocInfo;
 
-    vk::Result result = vmaAllocator_.createBuffer(&c_bufferCreateInfo, &c_allocationCreateInfo,
-                                                   &outBuffer, &outAllocation, &outAllocInfo);
+    vk::Result result = m_vmaAllocator.createBuffer(&cBufferCreateInfo, &cAllocationCreateInfo,
+                                                    &outBuffer, &outAllocation, &outAllocInfo);
 
     if (result != vk::Result::eSuccess) {
       return std::unexpected("VMA failed to create buffer: " + vk::to_string(result));
     }
 
-    return VmaBuffer(vmaAllocator_, outBuffer, outAllocation, outAllocInfo, bufferCreateInfo.size);
+    return VmaBuffer(m_vmaAllocator, outBuffer, outAllocation, outAllocInfo, bufferCreateInfo.size);
   }
 
   [[nodiscard]] std::expected<VmaImage, std::string>
   createImageVMA(const vk::ImageCreateInfo &imageCreateInfo,
                  const vma::AllocationCreateInfo &allocationCreateInfo) NOEXCEPT {
-    if (!vmaAllocator_) {
+    if (!m_vmaAllocator) {
       return std::unexpected("VMA Allocator not initialized in VulkanDevice::createImageVMA.");
     }
 
-    vk::ImageCreateInfo c_imageCreateInfo = imageCreateInfo;
-    vma::AllocationCreateInfo c_allocationCreateInfo = allocationCreateInfo;
+    vk::ImageCreateInfo cImageCreateInfo = imageCreateInfo;
+    vma::AllocationCreateInfo cAllocationCreateInfo = allocationCreateInfo;
 
     vk::Image outImage;
     vma::Allocation outAllocation;
     vma::AllocationInfo outAllocInfo;
 
-    vk::Result result = vmaAllocator_.createImage(&c_imageCreateInfo, &c_allocationCreateInfo,
-                                                  &outImage, &outAllocation, &outAllocInfo);
+    vk::Result result = m_vmaAllocator.createImage(&cImageCreateInfo, &cAllocationCreateInfo,
+                                                   &outImage, &outAllocation, &outAllocInfo);
 
     if (result != vk::Result::eSuccess) {
       return std::unexpected("VMA failed to create image: " + vk::to_string(result));
     }
 
-    return VmaImage(vmaAllocator_, outImage, outAllocation, outAllocInfo, imageCreateInfo.format,
+    return VmaImage(m_vmaAllocator, outImage, outAllocation, outAllocInfo, imageCreateInfo.format,
                     imageCreateInfo.extent);
   }
 
   [[nodiscard]] std::expected<vk::raii::CommandBuffer, std::string> beginSingleTimeCommands() {
-    if (!*transientCommandPool_) {
+    if (!*m_transientCommandPool) {
       return std::unexpected("VulkanDevice: Transient command pool not initialized.");
     }
 
-    vk::CommandBufferAllocateInfo allocInfo{.commandPool = *transientCommandPool_,
+    vk::CommandBufferAllocateInfo allocInfo{.commandPool = *m_transientCommandPool,
                                             .level = vk::CommandBufferLevel::ePrimary,
                                             .commandBufferCount = 1};
 
-    auto cmdBuffersResult = device_.allocateCommandBuffers(allocInfo);
+    auto cmdBuffersResult = m_device.allocateCommandBuffers(allocInfo);
     if (!cmdBuffersResult) {
       return std::unexpected("Failed to allocate single-time command buffer: " +
                              vk::to_string(cmdBuffersResult.error()));
@@ -297,7 +297,7 @@ public:
 
   [[nodiscard]] std::expected<void, std::string>
   endSingleTimeCommands(vk::raii::CommandBuffer commandBuffer) {
-    if (!*commandBuffer || !*queue_ || !*device_) {
+    if (!*commandBuffer || !*queue || !*m_device) {
       return std::unexpected("VulkanDevice: Invalid parameter for endSingleTimeCommands.");
     }
 
@@ -305,16 +305,16 @@ public:
 
     vk::SubmitInfo submitInfo{.commandBufferCount = 1, .pCommandBuffers = &*commandBuffer};
 
-    auto fenceResult = device_.createFence({});
+    auto fenceResult = m_device.createFence({});
     if (!fenceResult) {
       return std::unexpected("Failed to create fence for single-time command: " +
                              vk::to_string(fenceResult.error()));
     }
     vk::raii::Fence fence = std::move(*fenceResult);
 
-    queue_.submit(submitInfo, *fence);
+    queue.submit(submitInfo, *fence);
 
-    vk::Result waitResult = device_.waitForFences({*fence}, VK_TRUE, UINT64_MAX);
+    vk::Result waitResult = m_device.waitForFences({*fence}, VK_TRUE, UINT64_MAX);
     if (waitResult != vk::Result::eSuccess) {
       return std::unexpected("Failed to wait for single-time command fence: " +
                              vk::to_string(waitResult));
@@ -325,11 +325,11 @@ public:
 
   [[nodiscard]] std::expected<void, std::string>
   executeSingleTimeCommands(const std::function<void(vk::CommandBuffer)> &recordCommands) {
-    vk::CommandBufferAllocateInfo allocInfo{.commandPool = *transientCommandPool_,
+    vk::CommandBufferAllocateInfo allocInfo{.commandPool = *m_transientCommandPool,
                                             .level = vk::CommandBufferLevel::ePrimary,
                                             .commandBufferCount = 1};
 
-    auto cmdBuffersResult = device_.allocateCommandBuffers(allocInfo);
+    auto cmdBuffersResult = m_device.allocateCommandBuffers(allocInfo);
     if (!cmdBuffersResult) {
       return std::unexpected("Failed to allocate single-time command buffer: " +
                              vk::to_string(cmdBuffersResult.error()));
@@ -346,8 +346,8 @@ public:
 
     vk::SubmitInfo submitInfo{.commandBufferCount = 1, .pCommandBuffers = &*commandBuffer};
 
-    queue_.submit(submitInfo, {});
-    queue_.waitIdle();
+    queue.submit(submitInfo, {});
+    queue.waitIdle();
 
     return {};
   }

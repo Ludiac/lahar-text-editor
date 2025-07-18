@@ -24,8 +24,9 @@ export [[nodiscard]] std::expected<BuiltSceneMeshes, std::string>
 populateSceneFromGltf(Scene &targetScene, const LoadedGltfScene &gltfData, VulkanDevice &device,
                       TextureStore &textureStore, VulkanPipeline *defaultPipeline, u32 imageCount,
                       const vk::raii::DescriptorSetLayout &descriptorLayout) {
-  if (!defaultPipeline)
+  if (defaultPipeline == nullptr) {
     return std::unexpected("SceneBuilder: Default pipeline is null.");
+}
 
   BuiltSceneMeshes builtMeshesResult;
   std::map<int, std::vector<Mesh *>> gltfMeshIndexToEngineMeshesMap;
@@ -37,18 +38,19 @@ populateSceneFromGltf(Scene &targetScene, const LoadedGltfScene &gltfData, Vulka
 
     for (int primIdx = 0; primIdx < gltfMesh.primitives.size(); ++primIdx) {
       const auto &gltfPrimitive = gltfMesh.primitives[primIdx];
-      if (gltfPrimitive.vertices.empty() || gltfPrimitive.indices.empty())
+      if (gltfPrimitive.vertices.empty() || gltfPrimitive.indices.empty()) {
         continue;
+}
 
       Material engineMaterial = gltfPrimitive.material;
       PBRTextures enginePbrTextures;
 
       // Helper to load a texture from GLTF data or return a default
-      auto load_gltf_texture =
-          [&](int image_index, const std::string &texture_type_name,
-              std::shared_ptr<Texture> fallback_texture) -> std::shared_ptr<Texture> {
-        if (image_index >= 0) {
-          auto imageIt = gltfData.images.find(image_index);
+      auto loadGltfTexture =
+          [&](int imageIndex, const std::string &textureTypeName,
+              std::shared_ptr<Texture> fallbackTexture) -> std::shared_ptr<Texture> {
+        if (imageIndex >= 0) {
+          auto imageIt = gltfData.images.find(imageIndex);
           if (imageIt != gltfData.images.end()) {
             GltfImageData loadedImgData = imageIt->second;
             // Ensure SRGB status is set correctly for color data
@@ -56,24 +58,24 @@ populateSceneFromGltf(Scene &targetScene, const LoadedGltfScene &gltfData, Vulka
           } else {
             std::println("Warning: GLTF material specified {} texture (image index {}), but data "
                          "not found. Using default.",
-                         texture_type_name, image_index);
+                         textureTypeName, imageIndex);
           }
         }
         // std::println("using default texture {}", texture_type_name);
-        return fallback_texture;
+        return fallbackTexture;
       };
 
-      enginePbrTextures.baseColor = load_gltf_texture(
+      enginePbrTextures.baseColor = loadGltfTexture(
           gltfPrimitive.baseColorTextureGltfIndex, "BaseColor", textureStore.getDefaultTexture());
-      enginePbrTextures.normal = load_gltf_texture(gltfPrimitive.normalTextureGltfIndex, "Normal",
+      enginePbrTextures.normal = loadGltfTexture(gltfPrimitive.normalTextureGltfIndex, "Normal",
                                                    textureStore.getDefaultNormalTexture());
       enginePbrTextures.metallicRoughness =
-          load_gltf_texture(gltfPrimitive.metallicRoughnessTextureGltfIndex, "MetallicRoughness",
+          loadGltfTexture(gltfPrimitive.metallicRoughnessTextureGltfIndex, "MetallicRoughness",
                             textureStore.getDefaultMRTexture());
-      enginePbrTextures.occlusion = load_gltf_texture(
+      enginePbrTextures.occlusion = loadGltfTexture(
           gltfPrimitive.occlusionTextureGltfIndex, "Occlusion", textureStore.getDefaultTexture());
       enginePbrTextures.emissive =
-          load_gltf_texture(gltfPrimitive.emissiveTextureGltfIndex, "Emissive",
+          loadGltfTexture(gltfPrimitive.emissiveTextureGltfIndex, "Emissive",
                             textureStore.getDefaultEmissiveTexture());
 
       std::string engineMeshName = gltfMesh.name + "_Prim" + std::to_string(primIdx);
@@ -111,7 +113,7 @@ populateSceneFromGltf(Scene &targetScene, const LoadedGltfScene &gltfData, Vulka
         } else if (primitiveEngineMeshes.size() == 1) {
           nodeCreateInfo.mesh = primitiveEngineMeshes[0];
           engineNodeForGltfNode =
-              targetScene.createNode(nodeCreateInfo, device.descriptorPool_, descriptorLayout);
+              targetScene.createNode(nodeCreateInfo, device.descriptorPool, descriptorLayout);
         } else {
           // If a glTF node has multiple primitives, create a parent node for them
           // and then create child nodes for each primitive.
@@ -125,7 +127,7 @@ populateSceneFromGltf(Scene &targetScene, const LoadedGltfScene &gltfData, Vulka
                 .parent = engineNodeForGltfNode, // This child *does* have a parent right away
                 .name = primitiveMesh->getName(),
             };
-            targetScene.createNode(childNodeCi, device.descriptorPool_, descriptorLayout);
+            targetScene.createNode(childNodeCi, device.descriptorPool, descriptorLayout);
           }
         }
       } else {
@@ -142,13 +144,14 @@ populateSceneFromGltf(Scene &targetScene, const LoadedGltfScene &gltfData, Vulka
   for (size_t gltfNodeIdx = 0; gltfNodeIdx < gltfData.nodes.size(); ++gltfNodeIdx) {
     const auto &gltfNode = gltfData.nodes[gltfNodeIdx];
     SceneNode *engineParentNode = createdEngineNodes[gltfNodeIdx];
-    if (!engineParentNode)
+    if (engineParentNode == nullptr) {
       continue;
+}
 
     for (int childGltfNodeIndex : gltfNode.childrenIndices) {
       if (childGltfNodeIndex >= 0 && childGltfNodeIndex < createdEngineNodes.size()) {
         SceneNode *engineChildNode = createdEngineNodes[childGltfNodeIndex];
-        if (engineChildNode) {
+        if (engineChildNode != nullptr) {
           // The improved SceneNode::addChild will handle removing the child from its old parent
           // (which would be fatherNode_ if it was initially unparented) and adding it
           // to the new parent (engineParentNode) correctly.

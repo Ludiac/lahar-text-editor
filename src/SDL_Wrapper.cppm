@@ -10,7 +10,7 @@ import :Types;
 import vulkan_hpp;
 import std;
 
-export struct SDL_Wrapper {
+export struct SdlWrapper {
   SDL_Window *window{nullptr};
 
   int init() {
@@ -18,15 +18,15 @@ export struct SDL_Wrapper {
       SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "wayland");
     }
     if (!SDL_Init(SDL_INIT_VIDEO)) {
-      std::cerr << "[SDL_Wrapper] Error: SDL_Init(): " << SDL_GetError() << std::endl;
+      std::cerr << "[SDL_Wrapper] Error: SDL_Init(): " << SDL_GetError() << '\n';
 
       return -1;
     }
-    SDL_WindowFlags window_flags =
+    auto windowFlags =
         (SDL_WindowFlags)(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
-    window = SDL_CreateWindow("Dear ImGui SDL3+Vulkan example", 1280, 720, window_flags);
+    window = SDL_CreateWindow("Dear ImGui SDL3+Vulkan example", 1280, 720, windowFlags);
     if (window == nullptr) {
-      std::cerr << "[SDL_Wrapper] Error: SDL_CreateWindow(): " << SDL_GetError() << std::endl;
+      std::cerr << "[SDL_Wrapper] Error: SDL_CreateWindow(): " << SDL_GetError() << '\n';
 
       return -1;
     }
@@ -34,7 +34,7 @@ export struct SDL_Wrapper {
   }
 
   void terminate() {
-    if (window) {
+    if (window != nullptr) {
       SDL_DestroyWindow(window);
       window = nullptr;
     }
