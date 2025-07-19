@@ -18,6 +18,7 @@ import vulkan_hpp;
 import std;
 import BS.thread_pool;
 
+import :InputHandler;
 import :VulkanWindow;
 import :VulkanDevice;
 import :VulkanInstance;
@@ -27,8 +28,9 @@ import :imgui;
 import :TextSystem;
 import :UISystem;
 import :ui;
-import :TextArea;
+import :TextEditor;
 import :TextView;
+import :TwoDEngine;   // Import the new 3D engine module
 import :ThreeDEngine; // Import the new 3D engine module
 
 namespace {
@@ -56,165 +58,19 @@ export class App {
 
   // 3D Engine
   std::unique_ptr<ThreeDEngine> m_threeDEngine;
+  std::unique_ptr<TwoDEngine> m_twoDEngine;
 
-  // 2D Rendering Systems
-  VulkanPipeline m_textPipeline;
-  VulkanPipeline m_uiPipeline;
   vk::raii::PipelineCache m_pipelineCache{nullptr};
-  TextSystem m_textSystem;
-  UISystem m_uiSystem;
 
-  // Text Editor MVC Components
-  TextEditor m_textEditor{
-      "Lorem ipsum vulkan\n Lorem ipsum vulkan Lorem\n ipsum vulkan Lorem ipsum "
-      "vulkan Lorem ipsum\n vulkan"};
-  std::unique_ptr<TextView> m_textView;
-  std::vector<Font *> m_registeredFonts;
+  InputHandler m_inputHandler{nullptr};
 
-  // Async Asset Loading
   BS::thread_pool<> m_thread_pool;
-  std::vector<std::future<std::expected<Font *, std::string>>> m_fontLoadFutures;
-  std::mutex m_fontFuturesMutex;
-
-  // UI State
-  i32 m_fontSizeMultiplier{0};
-  TextToggles m_textToggles;
 
   ImGuiMenu m_imguiMenu;
 
 private:
   // All initialization functions that can fail are changed to return a std::expected.
   // This allows us to propagate errors up to the main `run` function without calling std::exit.
-  [[nodiscard]] std::expected<void, std::string> create2DGraphicsPipelines() {
-    auto textVertShaderResult =
-        createShaderModuleFromFile(m_device.logical(), "shaders/text_vert.spv");
-    if (!textVertShaderResult) {
-      return std::unexpected(textVertShaderResult.error());
-    }
-    auto textFragShaderResult =
-        createShaderModuleFromFile(m_device.logical(), "shaders/text_frag.spv");
-    if (!textFragShaderResult) {
-      return std::unexpected(textFragShaderResult.error());
-    }
-    auto textVertShader = std::move(*textVertShaderResult);
-    auto textFragShader = std::move(*textFragShaderResult);
-
-    vk::raii::DescriptorSetLayout textSetLayout{nullptr};
-    std::vector<vk::DescriptorSetLayoutBinding> textBindings = {
-        {.binding = 0,
-         .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-         .descriptorCount = 1,
-         .stageFlags = vk::ShaderStageFlagBits::eFragment}};
-    vk::DescriptorSetLayoutCreateInfo textLayoutInfo{
-        .bindingCount = static_cast<u32>(textBindings.size()), .pBindings = textBindings.data()};
-
-    auto textSetLayoutResult = m_device.logical().createDescriptorSetLayout(textLayoutInfo);
-    if (!textSetLayoutResult) {
-      return std::unexpected("Failed to create text descriptor set layout.");
-    }
-
-    textSetLayout = std::move(textSetLayoutResult.value());
-
-    auto uiVertShaderResult = createShaderModuleFromFile(m_device.logical(), "shaders/ui_vert.spv");
-    if (!uiVertShaderResult) {
-      return std::unexpected(uiVertShaderResult.error());
-    }
-    auto uiFragShaderResult = createShaderModuleFromFile(m_device.logical(), "shaders/ui_frag.spv");
-    if (!uiFragShaderResult) {
-      return std::unexpected(uiFragShaderResult.error());
-    }
-    auto uiVertShader = std::move(*uiVertShaderResult);
-    auto uiFragShader = std::move(*uiFragShaderResult);
-
-    vk::raii::DescriptorSetLayout instanceSetLayout{nullptr};
-    std::vector<vk::DescriptorSetLayoutBinding> instanceBindings = {
-        {.binding = 0,
-         .descriptorType = vk::DescriptorType::eStorageBufferDynamic,
-         .descriptorCount = 1,
-         .stageFlags = vk::ShaderStageFlagBits::eVertex}};
-    vk::DescriptorSetLayoutCreateInfo instanceLayoutInfo{
-        .bindingCount = static_cast<u32>(instanceBindings.size()),
-        .pBindings = instanceBindings.data()};
-
-    auto instanceSetLayoutResult = m_device.logical().createDescriptorSetLayout(instanceLayoutInfo);
-    if (!instanceSetLayoutResult) {
-      return std::unexpected("Failed to create instance descriptor set layout.");
-    }
-    instanceSetLayout = std::move(instanceSetLayoutResult.value());
-
-    vk::PushConstantRange textPushConstantRange{.stageFlags = vk::ShaderStageFlagBits::eVertex |
-                                                              vk::ShaderStageFlagBits::eFragment,
-                                                .offset = 0,
-                                                .size = sizeof(std::array<std::byte, 128>)};
-    std::vector<vk::DescriptorSetLayout> textLayouts = {*instanceSetLayout, *textSetLayout};
-    auto textPipelineLayoutResult = m_textPipeline.createPipelineLayout(
-        m_device.logical(), textLayouts, {textPushConstantRange});
-    if (!textPipelineLayoutResult) {
-      return std::unexpected(textPipelineLayoutResult.error());
-    }
-
-    vk::PushConstantRange uiPushConstantRange{.stageFlags = vk::ShaderStageFlagBits::eVertex,
-                                              .offset = 0,
-                                              .size = sizeof(std::array<std::byte, 128>)};
-    std::vector<vk::DescriptorSetLayout> uiLayouts = {*instanceSetLayout};
-    auto uiPipelineLayoutResult =
-        m_uiPipeline.createPipelineLayout(m_device.logical(), uiLayouts, {uiPushConstantRange});
-    if (!uiPipelineLayoutResult) {
-      return std::unexpected(uiPipelineLayoutResult.error());
-    }
-
-    std::vector<vk::PipelineShaderStageCreateInfo> textShaderStages = {
-        {.stage = vk::ShaderStageFlagBits::eVertex, .module = *textVertShader, .pName = "main"},
-        {.stage = vk::ShaderStageFlagBits::eFragment, .module = *textFragShader, .pName = "main"}};
-    std::vector<vk::PipelineShaderStageCreateInfo> uiShaderStages = {
-        {.stage = vk::ShaderStageFlagBits::eVertex, .module = *uiVertShader, .pName = "main"},
-        {.stage = vk::ShaderStageFlagBits::eFragment, .module = *uiFragShader, .pName = "main"}};
-
-    vk::VertexInputBindingDescription textBindingDesc{
-        .binding = 0, .stride = sizeof(TextQuadVertex), .inputRate = vk::VertexInputRate::eVertex};
-    std::array<vk::VertexInputAttributeDescription, 2> textAttrDesc;
-    textAttrDesc[0] = {
-        .location = 0, .binding = 0, .format = vk::Format::eR32G32Sfloat, .offset = 0};
-    textAttrDesc[1] = {.location = 1,
-                       .binding = 0,
-                       .format = vk::Format::eR32G32Sfloat,
-                       .offset = offsetof(TextQuadVertex, uv)};
-
-    vk::PipelineVertexInputStateCreateInfo vertexInputInfo{
-        .vertexBindingDescriptionCount = 1,
-        .pVertexBindingDescriptions = &textBindingDesc,
-        .vertexAttributeDescriptionCount = 2,
-        .pVertexAttributeDescriptions = textAttrDesc.data()};
-    vk::PipelineInputAssemblyStateCreateInfo inputAssembly{
-        .topology = vk::PrimitiveTopology::eTriangleList};
-    vk::PipelineColorBlendAttachmentState blendAttachment{
-        .blendEnable = vk::True,
-        .srcColorBlendFactor = vk::BlendFactor::eSrcAlpha,
-        .dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
-        .colorBlendOp = vk::BlendOp::eAdd,
-        .srcAlphaBlendFactor = vk::BlendFactor::eOne,
-        .dstAlphaBlendFactor = vk::BlendFactor::eZero,
-        .alphaBlendOp = vk::BlendOp::eAdd,
-        .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-                          vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA};
-    vk::PipelineDepthStencilStateCreateInfo depthStencil{.depthTestEnable = vk::False,
-                                                         .depthWriteEnable = vk::False};
-
-    auto textGraphicsPipelineResult = m_textPipeline.createGraphicsPipeline(
-        m_device.logical(), m_pipelineCache, textShaderStages, vertexInputInfo, inputAssembly,
-        m_wd.getRenderPass(), &blendAttachment, &depthStencil);
-    if (!textGraphicsPipelineResult) {
-      return std::unexpected(textGraphicsPipelineResult.error());
-    }
-    auto uiGraphicsPipelineResult = m_uiPipeline.createGraphicsPipeline(
-        m_device.logical(), m_pipelineCache, uiShaderStages, vertexInputInfo, inputAssembly,
-        m_wd.getRenderPass(), &blendAttachment, &depthStencil);
-    if (!uiGraphicsPipelineResult) {
-      return std::unexpected(uiGraphicsPipelineResult.error());
-    }
-
-    return {}; // Success
-  }
 
   [[nodiscard]] std::expected<void, std::string> setupVulkan() {
     // Each of these methods in the classes `VulkanInstance` and `VulkanDevice`
@@ -266,6 +122,10 @@ private:
         m_threeDEngine->update(m_wd.getImageIndex(), deltaTime, m_wd.getExtent());
       }
 
+      if (m_twoDEngine) {
+        m_twoDEngine->update(m_wd.getImageIndex(), deltaTime, m_wd.getExtent());
+      }
+
       std::array<vk::ClearValue, 2> clearValues{};
       clearValues[0].color = m_wd.clearValue.color;
       clearValues[1].depthStencil = {.depth = 1.0, .stencil = 0};
@@ -288,47 +148,9 @@ private:
         m_threeDEngine->draw(cmd, m_wd.getImageIndex());
       }
 
-      // Prepare and draw 2D elements
-      m_textSystem.beginFrame();
-      m_uiSystem.beginFrame();
-      RenderQueue renderQueue;
-
-      if (m_textView) {
-        m_textView->width = 5000.0;
-        m_textView->height = 3000.0;
-        usize firstLine = m_textView->getFirstVisibleLine();
-        usize numLines = m_textView->getVisibleLineCount();
-        usize lastLine = std::min(firstLine + numLines, m_textEditor.lineCount());
-        f64 currentLineYpos = 100.0;
-
-        if (!m_registeredFonts.empty()) {
-          for (usize i = firstLine; i < lastLine; ++i) {
-            m_textSystem.queueText(m_registeredFonts[0], m_textEditor.getLine(i),
-                                   static_cast<u32>(m_textView->fontPointSize), 200.0,
-                                   currentLineYpos, {1.0, 1.0, 1.0, 1.0});
-            const f64 POINT_SIZE = 36.0;
-            const f64 FONT_UNIT_TO_PIXEL_SCALE =
-                POINT_SIZE * (96.0 / 72.0 * 2) / m_registeredFonts[0]->atlasData.unitsPerEm;
-            const f64 LINE_HEIGHT_PX =
-                m_registeredFonts[0]->atlasData.lineHeight * FONT_UNIT_TO_PIXEL_SCALE;
-            currentLineYpos += (LINE_HEIGHT_PX > 0) ? LINE_HEIGHT_PX : 38.0;
-          }
-        }
+      if (m_twoDEngine) {
+        m_twoDEngine->draw(cmd, m_wd.getImageIndex(), m_wd.getExtent());
       }
-
-      m_uiSystem.queueQuad({.position = {200, 200},
-                            .size = {300, 300},
-                            .color = {0.0, 1.0, 0.0, 1.0},
-                            .zLayer = 0.0});
-      m_uiSystem.queueQuad({.position = {1000, 200},
-                            .size = {100, 300},
-                            .color = {0.0, 0.0, 1.0, 1.0},
-                            .zLayer = 0.0});
-
-      m_textSystem.prepareBatches(renderQueue, m_textPipeline, m_wd.getImageIndex(),
-                                  m_wd.getExtent(), m_textToggles);
-      m_uiSystem.prepareBatches(renderQueue, m_uiPipeline, m_wd.getImageIndex(), m_wd.getExtent());
-      processRenderQueue(cmd, renderQueue);
 
       ImGui_ImplVulkan_RenderDrawData(drawData, *cmd);
       cmd.endRenderPass();
@@ -401,7 +223,15 @@ private:
 
       SDL_Event event;
       while (SDL_PollEvent(&event)) {
+        // Give ImGui the first chance to process the event.
+        // This will update its internal state, like `WantCaptureKeyboard`.
         ImGui_ImplSDL3_ProcessEvent(&event);
+
+        // NEW: If ImGui is not using the keyboard, pass the event to our handler.
+        if (!imguiIO.WantCaptureKeyboard) {
+          m_inputHandler.handleEvent(event);
+        }
+
         if (event.type == SDL_EVENT_QUIT || (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
                                              event.window.windowID == SDL_GetWindowID(sdlWindow))) {
           done = true;
@@ -412,37 +242,23 @@ private:
             event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
           m_swapChainRebuild = true;
         }
-        if (event.type == SDL_EVENT_MOUSE_WHEEL && m_textView) {
-          m_textView->scroll(event.wheel.y > 0 ? -3 : 3);
-        }
+        // if (event.type == SDL_EVENT_MOUSE_WHEEL && m_textView) {
+        //   m_textView->scroll(event.wheel.y > 0 ? -3 : 3);
+        // }
       }
 
       if (m_threeDEngine) {
         m_threeDEngine->processGltfLoads();
       }
 
-      {
-        std::lock_guard lock(m_fontFuturesMutex);
-        for (auto it = m_fontLoadFutures.begin(); it != m_fontLoadFutures.end();) {
-          if (it->wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-            auto res = it->get();
-            if (res) {
-              Font *font = *res;
-              m_registeredFonts.emplace_back(font);
-              if (!m_textView && (font != nullptr)) {
-                m_textView = std::make_unique<TextView>(m_textEditor, *font);
-              }
-            } else {
-              std::println("failed to load font asynchronously: {}", res.error());
-            }
-            it = m_fontLoadFutures.erase(it);
-          }
-        }
+      if (m_twoDEngine) {
+        m_twoDEngine->processFontLoads();
       }
-
-      if (m_threeDEngine) {
-        readKeyboard(deltaTime, sdlWindow);
-      }
+      // // NEW: Only allow camera movement if not in INSERT mode.
+      // // This prevents typing 'w' from moving the camera.
+      // if (m_threeDEngine && m_inputHandler.getMode() != InputMode::INSERT) {
+      //   readKeyboard(deltaTime, sdlWindow);
+      // }
 
       if ((SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_MINIMIZED) != 0U) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -465,6 +281,9 @@ private:
         if (m_threeDEngine) {
           m_threeDEngine->onSwapchainRecreated(m_wd.getImageCount());
         }
+        if (m_twoDEngine) {
+          m_twoDEngine->onSwapchainRecreated(m_wd.getImageCount());
+        }
         m_swapChainRebuild = false;
       }
 
@@ -472,10 +291,21 @@ private:
       ImGui_ImplSDL3_NewFrame();
       ImGui::NewFrame();
 
-      m_imguiMenu.renderMegaMenu(
-          m_imguiMenu, m_wd, m_device, m_threeDEngine->getCamera(), m_threeDEngine->getScene(),
-          m_textSystem, m_threeDEngine->getShaderToggles(), m_threeDEngine->getLightUbo(),
-          m_textToggles, m_fontSizeMultiplier, m_wd.getCurrentFrame(), deltaTime);
+      m_imguiMenu.renderMegaMenu(m_imguiMenu, m_wd, m_device, m_threeDEngine->getCamera(),
+                                 m_threeDEngine->getScene(), m_threeDEngine->getShaderToggles(),
+                                 m_threeDEngine->getLightUbo(), m_twoDEngine->textToggles,
+                                 m_twoDEngine->fontSizeMultiplier, m_wd.getCurrentFrame(),
+                                 deltaTime);
+
+      // NEW: Render a status window to show the current input mode.
+      {
+        ImGui::Begin("Status");
+        const char *modeText =
+            (m_inputHandler.getMode() == InputMode::INSERT) ? "INSERT" : "NORMAL";
+        ImGui::Text("Input Mode: %s", modeText);
+        ImGui::Text("Press 'i' for Insert Mode, 'Esc' for Normal Mode.");
+        ImGui::End();
+      }
 
       ImGui::Render();
       frameRender(ImGui::GetDrawData(), deltaTime);
@@ -486,6 +316,7 @@ public:
   // The main entry point for the application. It returns an integer status code.
   // 0 for success, non-zero for failure.
   int run(SDL_Window *sdlWindow) {
+    m_inputHandler.setSDLwindow(sdlWindow);
     // We now check the result of each initialization step.
     // If a step fails, we print the error and return a non-zero exit code.
     if (auto res = setupVulkan(); !res) {
@@ -515,48 +346,10 @@ public:
     }
     m_threeDEngine->loadInitialAssets();
 
-    if (auto res = create2DGraphicsPipelines(); !res) {
-      std::println("2D graphics pipeline creation failed: {}", res.error());
+    m_twoDEngine = std::make_unique<TwoDEngine>(m_device, m_wd.getImageCount(), m_thread_pool);
+    if (auto res = m_twoDEngine->initialize(m_wd.getRenderPass(), m_pipelineCache); !res) {
+      std::println("2D engine initialization failed: {}", res.error());
       return 1;
-    }
-
-    auto textSystemExpected =
-        TextSystem::create(m_device, m_wd.getImageCount(), m_device.descriptorPool);
-    if (!textSystemExpected) {
-      std::println("textSystem creation failed: {}", textSystemExpected.error());
-      return 1;
-    }
-    m_textSystem = std::move(textSystemExpected.value());
-
-    auto uiSystemExpected =
-        UISystem::create(m_device, m_wd.getImageCount(), m_device.descriptorPool);
-    if (!uiSystemExpected) {
-      std::println("uiSystem creation failed: {}", uiSystemExpected.error());
-      return 1;
-    }
-    m_uiSystem = std::move(uiSystemExpected.value());
-
-    // Load 2D assets
-    {
-      std::lock_guard lock(m_fontFuturesMutex);
-      m_fontLoadFutures.emplace_back(m_thread_pool.submit_task([this]() {
-        // This is a bit of a hack, we need to get the layout from the pipeline
-        // but the pipeline is created after the text system.
-        // For now, we assume the layout is known.
-        vk::raii::DescriptorSetLayout textSetLayout{nullptr};
-        std::vector<vk::DescriptorSetLayoutBinding> textBindings = {
-            {.binding = 0,
-             .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-             .descriptorCount = 1,
-             .stageFlags = vk::ShaderStageFlagBits::eFragment}};
-        vk::DescriptorSetLayoutCreateInfo textLayoutInfo{.bindingCount =
-                                                             static_cast<u32>(textBindings.size()),
-                                                         .pBindings = textBindings.data()};
-        textSetLayout = m_device.logical().createDescriptorSetLayout(textLayoutInfo).value();
-        return m_textSystem.registerFont(
-            "../../assets/fonts/Inconsolata/InconsolataNerdFontMono-Regular.ttf", 64,
-            textSetLayout);
-      }));
     }
 
     // Setup ImGui

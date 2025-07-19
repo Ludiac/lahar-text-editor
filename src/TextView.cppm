@@ -7,8 +7,8 @@ module;
 export module vulkan_app:TextView;
 
 import std;
-import :TextArea; // The module for TextEditor
-import :text;     // The module for Font
+import :TextEditor; // The module for TextEditor
+import :text;       // The module for Font
 
 // Represents the visual style for a range of text.
 // For now, it only contains color, but can be expanded with font style (bold, italic), etc.

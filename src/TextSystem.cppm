@@ -57,8 +57,8 @@ public:
 
   // Private initialization function to handle fallible setup steps.
   [[nodiscard]] std::expected<void, std::string> initialize(const vk::raii::DescriptorPool &pool) {
-    if (auto res = createInstanceBuffers(*m_device, m_frameCount, m_maxQuadsPerFrame, m_instanceBuffers,
-                                         sizeof(TextInstanceData));
+    if (auto res = createInstanceBuffers(*m_device, m_frameCount, m_maxQuadsPerFrame,
+                                         m_instanceBuffers, sizeof(TextInstanceData));
         !res) {
       return std::unexpected("Failed to create text instance buffers: " + res.error());
     }
@@ -68,7 +68,8 @@ public:
     if (auto res = allocateDescriptorSets(pool); !res) {
       return std::unexpected(res.error());
     }
-    if (auto res = createStaticQuadBuffers(*m_device, m_staticVertexBuffer, m_staticIndexBuffer); !res) {
+    if (auto res = createStaticQuadBuffers(*m_device, m_staticVertexBuffer, m_staticIndexBuffer);
+        !res) {
       return std::unexpected("Failed to create static quad buffers: " + res.error());
     }
     return {};
@@ -147,23 +148,22 @@ public:
   };
 
   [[nodiscard]] std::expected<Font *, std::string>
-  registerFont(const std::string &fontPath, int pixelHeight,
-               const vk::raii::DescriptorSetLayout &textureLayout) {
+  registerFont(std::string fontPath, const vk::raii::DescriptorSetLayout &textureLayout) {
     auto font = std::make_unique<Font>();
-    auto atlasResult = createFontAtlasMSDF(fontPath, pixelHeight);
+    auto atlasResult = createFontAtlasMSDF(fontPath);
     if (!atlasResult) {
       return std::unexpected("Failed to create font atlas: " + atlasResult.error());
     }
     font->atlasData = std::move(*atlasResult);
 
-    auto texResult = createTexture(*m_device, font->atlasData.atlasBitmap.data(),
-                                   font->atlasData.atlasBitmap.size(),
-                                   vk::Extent3D{.width = (u32)font->atlasData.atlasWidth,
-                                                .height = (u32)font->atlasData.atlasHeight,
-                                                .depth = 1},
-                                   vk::Format::eR8G8B8A8Unorm, m_device->queue,
-                                   false, // generateMipmaps = false for MSDF
-                                   {}, {}, 1, vk::ImageViewType::e2D, &MSDF_FONT_SAMPLER_CREATE_INFO);
+    auto texResult = createTexture(
+        *m_device, font->atlasData.atlasBitmap.data(), font->atlasData.atlasBitmap.size(),
+        vk::Extent3D{.width = (u32)font->atlasData.atlasWidth,
+                     .height = (u32)font->atlasData.atlasHeight,
+                     .depth = 1},
+        vk::Format::eR8G8B8A8Unorm, m_device->queue,
+        false, // generateMipmaps = false for MSDF
+        {}, {}, 1, vk::ImageViewType::e2D, &MSDF_FONT_SAMPLER_CREATE_INFO);
 
     if (!texResult) {
       return std::unexpected("Failed to create font texture: " + texResult.error());
@@ -208,7 +208,8 @@ public:
     f64 cursorX = x;
 
     const f64 DESIRED_PIXEL_HEIGHT_FOR_EM = static_cast<f64>(pointSize) * MULT;
-    const f64 FONT_UNIT_TO_PIXEL_SCALE = DESIRED_PIXEL_HEIGHT_FOR_EM / static_cast<f64>(metrics.unitsPerEm);
+    const f64 FONT_UNIT_TO_PIXEL_SCALE =
+        DESIRED_PIXEL_HEIGHT_FOR_EM / static_cast<f64>(metrics.unitsPerEm);
 
     for (char c : text) {
       auto it = metrics.glyphs.find(static_cast<u32>(c));

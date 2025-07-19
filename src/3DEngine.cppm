@@ -28,14 +28,12 @@ import :VMA;
 namespace { // Anonymous namespace for internal helpers
 std::vector<Vertex> createAxisLineVertices(const glm::vec3 &start, const glm::vec3 &end,
                                            const glm::vec3 &normalPlaceholder) {
-  return {{.pos = start,
-           .normal = normalPlaceholder,
-           .uv = {0.0, 0.0},
-           .tangent = {1.0, 0.0, 0.0, 1.0}},
-          {.pos = end,
-           .normal = normalPlaceholder,
-           .uv = {1.0, 0.0},
-           .tangent = {1.0, 0.0, 0.0, 1.0}}};
+  return {
+      {.pos = start,
+       .normal = normalPlaceholder,
+       .uv = {0.0, 0.0},
+       .tangent = {1.0, 0.0, 0.0, 1.0}},
+      {.pos = end, .normal = normalPlaceholder, .uv = {1.0, 0.0}, .tangent = {1.0, 0.0, 0.0, 1.0}}};
 }
 std::vector<u32> createAxisLineIndices() { return {0, 1}; }
 } // namespace
@@ -96,10 +94,11 @@ public:
 
   void update(u32 frameIndex, float deltaTime, vk::Extent2D swapchainExtent) {
     m_camera.updateVectors();
-    m_scene.updateHierarchy(frameIndex, m_camera.getViewMatrix(),
-                           m_camera.getProjectionMatrix(static_cast<float>(swapchainExtent.width) /
-                                                       static_cast<float>(swapchainExtent.height)),
-                           deltaTime);
+    m_scene.updateHierarchy(
+        frameIndex, m_camera.getViewMatrix(),
+        m_camera.getProjectionMatrix(static_cast<float>(swapchainExtent.width) /
+                                     static_cast<float>(swapchainExtent.height)),
+        deltaTime);
     m_scene.updateAllDescriptorSetContents(frameIndex);
 
     // Update UBOs
@@ -109,8 +108,9 @@ public:
                 sizeof(ShaderTogglesUBO));
 
     // Update descriptor sets for scene-wide data
-    vk::DescriptorBufferInfo lightUboInfo{
-        .buffer = m_sceneLightsUbos[frameIndex].get(), .offset = 0, .range = sizeof(SceneLightsUBO)};
+    vk::DescriptorBufferInfo lightUboInfo{.buffer = m_sceneLightsUbos[frameIndex].get(),
+                                          .offset = 0,
+                                          .range = sizeof(SceneLightsUBO)};
     vk::DescriptorBufferInfo togglesUboInfo{.buffer = m_shaderTogglesUbos[frameIndex].get(),
                                             .offset = 0,
                                             .range = sizeof(ShaderTogglesUBO)};
@@ -397,8 +397,8 @@ private:
 
   void instanceGltfModel(const LoadedGltfScene &gltfData) {
     auto builtMeshesResult =
-        populateSceneFromGltf(m_scene, gltfData, m_device, *m_textureStore, m_graphicsPipelines.data(),
-                              m_frameCount, m_combinedMeshLayout);
+        populateSceneFromGltf(m_scene, gltfData, m_device, *m_textureStore,
+                              m_graphicsPipelines.data(), m_frameCount, m_combinedMeshLayout);
     if (!builtMeshesResult) {
       std::println("Failed to build engine scene from GLTF data: {}", builtMeshesResult.error());
       return;

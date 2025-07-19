@@ -18,71 +18,6 @@ import :TextSystem;
 // Forward-declare the Camera struct, assuming it's in its own module/header.
 struct Camera;
 
-// --- Forward declarations for internal (static) rendering functions ---
-// NOTE: p_open parameter is removed as they no longer manage their own window
-static void renderShaderTogglesContent(ShaderTogglesUBO &toggles);
-static void renderTextContent(i32 &fontSizeMultiplier, TextToggles &textToggles);
-static void renderCameraControlContent(Camera &camera);
-static void renderVulkanStateContent(VulkanDevice &device, VulkanWindow &wd, float frameTime);
-static void renderSceneHierarchyMaterialEditorContent(Scene &scene, u32 currentFrameIndex);
-static void renderLightControlContent(SceneLightsUBO &lightUBO);
-static void renderSceneNodeRecursive(SceneNode *node, u32 currentFrameIndex);
-static bool editMaterialProperties(const std::string &materialOwnerName, Material &material);
-
-export struct ImGuiMenu {
-  // Only one flag now to control the visibility of the single debug window
-  bool showDebugSettingsWindow = true;
-
-  static void renderMegaMenu(ImGuiMenu &imguiMenu, VulkanWindow &wd, VulkanDevice &device, Camera &camera,
-                      Scene &scene, TextSystem &textSystem, ShaderTogglesUBO &shaderToggles,
-                      SceneLightsUBO &lightUBO, TextToggles &textToggles, i32 fontSizeMultiplier,
-                      u32 currentFrameIndex, float frameTime) {
-
-    // Render the single, combined debug settings window if its flag is true.
-    if (imguiMenu.showDebugSettingsWindow) {
-      // Begin the single debug window. It is movable by default.
-      if (ImGui::Begin("Debug Settings", &imguiMenu.showDebugSettingsWindow,
-                       ImGuiWindowFlags_AlwaysAutoResize)) {
-        // Shader Toggles section
-        if (ImGui::CollapsingHeader("Shader Toggles", ImGuiTreeNodeFlags_DefaultOpen)) {
-          renderShaderTogglesContent(shaderToggles);
-        }
-        ImGui::Separator(); // Add a separator for visual distinction
-
-        // Text Parameters section
-        if (ImGui::CollapsingHeader("Text Parameters", ImGuiTreeNodeFlags_DefaultOpen)) {
-          renderTextContent(fontSizeMultiplier, textToggles);
-        }
-        ImGui::Separator();
-
-        // Camera Controls section
-        if (ImGui::CollapsingHeader("Camera Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
-          renderCameraControlContent(camera);
-        }
-        ImGui::Separator();
-
-        // Vulkan State section
-        if (ImGui::CollapsingHeader("Vulkan State", ImGuiTreeNodeFlags_DefaultOpen)) {
-          renderVulkanStateContent(device, wd, frameTime);
-        }
-        ImGui::Separator();
-
-        // Scene Inspector section
-        if (ImGui::CollapsingHeader("Scene Inspector", ImGuiTreeNodeFlags_DefaultOpen)) {
-          renderSceneHierarchyMaterialEditorContent(scene, currentFrameIndex);
-        }
-        ImGui::Separator();
-
-        // Light Controls section
-        if (ImGui::CollapsingHeader("Light Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
-          renderLightControlContent(lightUBO);
-        }
-      }
-      ImGui::End(); // End of the single "Debug Settings" window
-    }
-  }
-};
-
 // --- Internal (static) Implementations of Debug Windows Content ---
 
 /**
@@ -181,17 +116,6 @@ static void renderVulkanStateContent(VulkanDevice &device, VulkanWindow &wd, flo
 }
 
 /**
- * @brief Renders the main scene hierarchy and material editor. (Content only)
- */
-static void renderSceneHierarchyMaterialEditorContent(Scene &scene, u32 currentFrameIndex) {
-  // The internal tree structure for the scene graph itself
-  if (ImGui::TreeNodeEx("Scene Graph", ImGuiTreeNodeFlags_DefaultOpen)) {
-    renderSceneNodeRecursive(scene.fatherNode.get(), currentFrameIndex);
-    ImGui::TreePop();
-  }
-}
-
-/**
  * @brief Renders controls for scene lights. (Content only)
  */
 static void renderLightControlContent(SceneLightsUBO &lightUBO) {
@@ -211,13 +135,30 @@ static void renderLightControlContent(SceneLightsUBO &lightUBO) {
 }
 
 /**
+ * @brief Renders ImGui controls for a single material's properties.
+ * (No change to this function, it's an internal helper for material editing)
+ */
+static bool editMaterialProperties(const std::string &materialOwnerName, Material &material) {
+  bool changed = false;
+  if (ImGui::TreeNode("Material")) {
+    changed |= ImGui::ColorEdit4("Base Color Factor", &material.baseColorFactor.x);
+    changed |= ImGui::SliderFloat("Metallic Factor", &material.metallicFactor, 0.0, 1.0);
+    changed |= ImGui::SliderFloat("Roughness Factor", &material.roughnessFactor, 0.0, 1.0);
+    changed |= ImGui::SliderFloat("Occlusion Strength", &material.occlusionStrength, 0.0, 1.0);
+    changed |= ImGui::ColorEdit3("Emissive Factor", &material.emissiveFactor.x);
+    ImGui::TreePop();
+  }
+  return changed;
+}
+
+/**
  * @brief Recursively renders an ImGui tree for a SceneNode and its children.
  * (No change to this function, it's an internal helper for scene display)
  */
 static void renderSceneNodeRecursive(SceneNode *node, u32 currentFrameIndex) {
   if (node == nullptr) {
     return;
-}
+  }
 
   ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_OpenOnArrow |
                                  ImGuiTreeNodeFlags_OpenOnDoubleClick |
@@ -246,18 +187,66 @@ static void renderSceneNodeRecursive(SceneNode *node, u32 currentFrameIndex) {
 }
 
 /**
- * @brief Renders ImGui controls for a single material's properties.
- * (No change to this function, it's an internal helper for material editing)
+ * @brief Renders the main scene hierarchy and material editor. (Content only)
  */
-static bool editMaterialProperties(const std::string &materialOwnerName, Material &material) {
-  bool changed = false;
-  if (ImGui::TreeNode("Material")) {
-    changed |= ImGui::ColorEdit4("Base Color Factor", &material.baseColorFactor.x);
-    changed |= ImGui::SliderFloat("Metallic Factor", &material.metallicFactor, 0.0, 1.0);
-    changed |= ImGui::SliderFloat("Roughness Factor", &material.roughnessFactor, 0.0, 1.0);
-    changed |= ImGui::SliderFloat("Occlusion Strength", &material.occlusionStrength, 0.0, 1.0);
-    changed |= ImGui::ColorEdit3("Emissive Factor", &material.emissiveFactor.x);
+static void renderSceneHierarchyMaterialEditorContent(Scene &scene, u32 currentFrameIndex) {
+  // The internal tree structure for the scene graph itself
+  if (ImGui::TreeNodeEx("Scene Graph", ImGuiTreeNodeFlags_DefaultOpen)) {
+    renderSceneNodeRecursive(scene.fatherNode.get(), currentFrameIndex);
     ImGui::TreePop();
   }
-  return changed;
 }
+
+export struct ImGuiMenu {
+  // Only one flag now to control the visibility of the single debug window
+  bool showDebugSettingsWindow = true;
+
+  static void renderMegaMenu(ImGuiMenu &imguiMenu, VulkanWindow &wd, VulkanDevice &device,
+                             Camera &camera, Scene &scene, ShaderTogglesUBO &shaderToggles,
+                             SceneLightsUBO &lightUBO, TextToggles &textToggles,
+                             i32 fontSizeMultiplier, u32 currentFrameIndex, float frameTime) {
+
+    // Render the single, combined debug settings window if its flag is true.
+    if (imguiMenu.showDebugSettingsWindow) {
+      // Begin the single debug window. It is movable by default.
+      if (ImGui::Begin("Debug Settings", &imguiMenu.showDebugSettingsWindow,
+                       ImGuiWindowFlags_AlwaysAutoResize)) {
+        // Shader Toggles section
+        if (ImGui::CollapsingHeader("Shader Toggles", ImGuiTreeNodeFlags_DefaultOpen)) {
+          renderShaderTogglesContent(shaderToggles);
+        }
+        ImGui::Separator(); // Add a separator for visual distinction
+
+        // Text Parameters section
+        if (ImGui::CollapsingHeader("Text Parameters", ImGuiTreeNodeFlags_DefaultOpen)) {
+          renderTextContent(fontSizeMultiplier, textToggles);
+        }
+        ImGui::Separator();
+
+        // Camera Controls section
+        if (ImGui::CollapsingHeader("Camera Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
+          renderCameraControlContent(camera);
+        }
+        ImGui::Separator();
+
+        // Vulkan State section
+        if (ImGui::CollapsingHeader("Vulkan State", ImGuiTreeNodeFlags_DefaultOpen)) {
+          renderVulkanStateContent(device, wd, frameTime);
+        }
+        ImGui::Separator();
+
+        // Scene Inspector section
+        if (ImGui::CollapsingHeader("Scene Inspector", ImGuiTreeNodeFlags_DefaultOpen)) {
+          renderSceneHierarchyMaterialEditorContent(scene, currentFrameIndex);
+        }
+        ImGui::Separator();
+
+        // Light Controls section
+        if (ImGui::CollapsingHeader("Light Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
+          renderLightControlContent(lightUBO);
+        }
+      }
+      ImGui::End(); // End of the single "Debug Settings" window
+    }
+  }
+};

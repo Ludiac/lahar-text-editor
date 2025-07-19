@@ -124,6 +124,7 @@ target_sources(AppModule
         src/imgui.cppm
         src/memory_types.cppm
         src/utils.cppm
+        src/InputHandler.cppm
         src/extra.cppm
         
         src/VulkanWindow.cppm
@@ -131,14 +132,15 @@ target_sources(AppModule
         src/VulkanInstance.cppm
         src/VulkanPipeline.cppm
         
+        src/2DEngine.cppm
         src/ui.cppm
         src/text.cppm
         src/UISystem.cppm
         src/TextSystem.cppm
         src/TextEditor.cppm
         src/TextView.cppm
-        src/3DEngine.cppm
 
+        src/3DEngine.cppm
         src/ModelLoader.cppm
         src/types.cppm
         src/mesh.cppm

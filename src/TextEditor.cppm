@@ -2,7 +2,7 @@ module;
 
 #include "primitive_types.hpp"
 
-export module vulkan_app:TextArea;
+export module vulkan_app:TextEditor;
 
 import std;
 /**

@@ -65,13 +65,12 @@ export struct Font {
  * MSDF, and the Alpha channel stores a true SDF.
  *
  * @param fontPath Path to the .ttf font file.
- * @param pixelHeight The desired height of the font in pixels for metric
  * calculations.
  * @return A FontAtlasData struct containing the MTSDF bitmap, dimensions, and
  * glyph metrics.
  */
 export [[nodiscard]] std::expected<FontAtlasData, std::string>
-createFontAtlasMSDF(const std::string &fontPath, int pixelHeight) {
+createFontAtlasMSDF(const std::string &fontPath) {
   FontAtlasData atlasData;
 
   msdfgen::FreetypeHandle *ftHandle = msdfgen::initializeFreetype();
@@ -104,8 +103,8 @@ createFontAtlasMSDF(const std::string &fontPath, int pixelHeight) {
   // atlasData.pxRange = 2.0;
 
   const std::string FULL_CHARSET = " !,."
-                                  "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                                  "abcdefghijklmnopqrstuvwxyz";
+                                   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                                   "abcdefghijklmnopqrstuvwxyz";
   std::string currentCharset = "Vulkan?";
   if (currentCharset.empty()) {
     currentCharset = FULL_CHARSET;
@@ -150,7 +149,6 @@ createFontAtlasMSDF(const std::string &fontPath, int pixelHeight) {
   packer.setPixelRange(atlasData.pxRange);
   // Let the packer determine the scale automatically based on glyphs and pixel
   // range Or uncomment the next line to force a specific pixel size for the EM
-  // square packer.setScale(static_cast<double>(pixelHeight));
   packer.setMiterLimit(MITER_LIMIT);
   packer.setOuterUnitPadding(32);
   // packer.setScale(1.0);
