@@ -26,7 +26,7 @@ populateSceneFromGltf(Scene &targetScene, const LoadedGltfScene &gltfData, Vulka
                       const vk::raii::DescriptorSetLayout &descriptorLayout) {
   if (defaultPipeline == nullptr) {
     return std::unexpected("SceneBuilder: Default pipeline is null.");
-}
+  }
 
   BuiltSceneMeshes builtMeshesResult;
   std::map<int, std::vector<Mesh *>> gltfMeshIndexToEngineMeshesMap;
@@ -40,7 +40,7 @@ populateSceneFromGltf(Scene &targetScene, const LoadedGltfScene &gltfData, Vulka
       const auto &gltfPrimitive = gltfMesh.primitives[primIdx];
       if (gltfPrimitive.vertices.empty() || gltfPrimitive.indices.empty()) {
         continue;
-}
+      }
 
       Material engineMaterial = gltfPrimitive.material;
       PBRTextures enginePbrTextures;
@@ -65,18 +65,18 @@ populateSceneFromGltf(Scene &targetScene, const LoadedGltfScene &gltfData, Vulka
         return fallbackTexture;
       };
 
-      enginePbrTextures.baseColor = loadGltfTexture(
-          gltfPrimitive.baseColorTextureGltfIndex, "BaseColor", textureStore.getDefaultTexture());
+      enginePbrTextures.baseColor = loadGltfTexture(gltfPrimitive.baseColorTextureGltfIndex,
+                                                    "BaseColor", textureStore.getDefaultTexture());
       enginePbrTextures.normal = loadGltfTexture(gltfPrimitive.normalTextureGltfIndex, "Normal",
-                                                   textureStore.getDefaultNormalTexture());
+                                                 textureStore.getDefaultNormalTexture());
       enginePbrTextures.metallicRoughness =
           loadGltfTexture(gltfPrimitive.metallicRoughnessTextureGltfIndex, "MetallicRoughness",
-                            textureStore.getDefaultMRTexture());
-      enginePbrTextures.occlusion = loadGltfTexture(
-          gltfPrimitive.occlusionTextureGltfIndex, "Occlusion", textureStore.getDefaultTexture());
+                          textureStore.getDefaultMRTexture());
+      enginePbrTextures.occlusion = loadGltfTexture(gltfPrimitive.occlusionTextureGltfIndex,
+                                                    "Occlusion", textureStore.getDefaultTexture());
       enginePbrTextures.emissive =
           loadGltfTexture(gltfPrimitive.emissiveTextureGltfIndex, "Emissive",
-                            textureStore.getDefaultEmissiveTexture());
+                          textureStore.getDefaultEmissiveTexture());
 
       std::string engineMeshName = gltfMesh.name + "_Prim" + std::to_string(primIdx);
       auto newEngineMesh = std::make_unique<Mesh>(
@@ -113,7 +113,7 @@ populateSceneFromGltf(Scene &targetScene, const LoadedGltfScene &gltfData, Vulka
         } else if (primitiveEngineMeshes.size() == 1) {
           nodeCreateInfo.mesh = primitiveEngineMeshes[0];
           engineNodeForGltfNode =
-              targetScene.createNode(nodeCreateInfo, device.descriptorPool, descriptorLayout);
+              targetScene.createNode(nodeCreateInfo, device.descriptorPool(), descriptorLayout);
         } else {
           // If a glTF node has multiple primitives, create a parent node for them
           // and then create child nodes for each primitive.
@@ -127,7 +127,7 @@ populateSceneFromGltf(Scene &targetScene, const LoadedGltfScene &gltfData, Vulka
                 .parent = engineNodeForGltfNode, // This child *does* have a parent right away
                 .name = primitiveMesh->getName(),
             };
-            targetScene.createNode(childNodeCi, device.descriptorPool, descriptorLayout);
+            targetScene.createNode(childNodeCi, device.descriptorPool(), descriptorLayout);
           }
         }
       } else {
@@ -146,7 +146,7 @@ populateSceneFromGltf(Scene &targetScene, const LoadedGltfScene &gltfData, Vulka
     SceneNode *engineParentNode = createdEngineNodes[gltfNodeIdx];
     if (engineParentNode == nullptr) {
       continue;
-}
+    }
 
     for (int childGltfNodeIndex : gltfNode.childrenIndices) {
       if (childGltfNodeIndex >= 0 && childGltfNodeIndex < createdEngineNodes.size()) {

@@ -52,39 +52,29 @@ void checkVkResultForImgui(VkResult err) {
 
 export class App {
   VulkanInstance m_instance;
-  VulkanDevice m_device{m_instance};
+  VulkanDevice m_device;
   VulkanWindow m_wd;
   bool m_swapChainRebuild = false;
 
-  // 3D Engine
   std::unique_ptr<ThreeDEngine> m_threeDEngine;
   std::unique_ptr<TwoDEngine> m_twoDEngine;
 
   vk::raii::PipelineCache m_pipelineCache{nullptr};
 
-  InputHandler m_inputHandler{nullptr};
+  InputHandler m_inputHandler{nullptr, nullptr};
 
   BS::thread_pool<> m_thread_pool;
 
   ImGuiMenu m_imguiMenu;
 
 private:
-  // All initialization functions that can fail are changed to return a std::expected.
-  // This allows us to propagate errors up to the main `run` function without calling std::exit.
-
   [[nodiscard]] std::expected<void, std::string> setupVulkan() {
     // Each of these methods in the classes `VulkanInstance` and `VulkanDevice`
     // should also be refactored to return std::expected instead of calling std::exit.
     if (auto res = m_instance.create(); !res) {
       return std::unexpected(res.error());
     }
-    if (auto res = m_instance.setupDebugMessenger(); !res) {
-      return std::unexpected(res.error());
-    }
-    if (auto res = m_device.pickPhysicalDevice(); !res) {
-      return std::unexpected(res.error());
-    }
-    if (auto res = m_device.createLogicalDevice(); !res) {
+    if (auto res = m_device.create(m_instance); !res) {
       return std::unexpected(res.error());
     }
 
@@ -232,6 +222,12 @@ private:
           m_inputHandler.handleEvent(event);
         }
 
+        if (m_inputHandler.shouldCycleFocus()) {
+          m_twoDEngine->cycleActiveWidgetFocus();
+          m_inputHandler.setEditor(m_twoDEngine->getActiveTextEditor());
+          m_inputHandler.resetCycleFocusFlag();
+        }
+
         if (event.type == SDL_EVENT_QUIT || (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
                                              event.window.windowID == SDL_GetWindowID(sdlWindow))) {
           done = true;
@@ -351,6 +347,7 @@ public:
       std::println("2D engine initialization failed: {}", res.error());
       return 1;
     }
+    m_inputHandler.setEditor(m_twoDEngine->getActiveTextEditor());
 
     // Setup ImGui
     IMGUI_CHECKVERSION();

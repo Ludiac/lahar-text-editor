@@ -52,7 +52,7 @@ public:
   // Constructor now takes only essential parameters, no heavy initialization.
   TextSystem(VulkanDevice &dev, u32 inFlightFrameCount)
       : m_device(&dev), m_frameCount(inFlightFrameCount),
-        m_minStorageBufferOffsetAlignment(dev.limits.minStorageBufferOffsetAlignment) {}
+        m_minStorageBufferOffsetAlignment(dev.limits().minStorageBufferOffsetAlignment) {}
   TextSystem() = default;
 
   // Private initialization function to handle fallible setup steps.
@@ -161,7 +161,7 @@ public:
         vk::Extent3D{.width = (u32)font->atlasData.atlasWidth,
                      .height = (u32)font->atlasData.atlasHeight,
                      .depth = 1},
-        vk::Format::eR8G8B8A8Unorm, m_device->queue,
+        vk::Format::eR8G8B8A8Unorm, m_device->graphicsQueue(),
         false, // generateMipmaps = false for MSDF
         {}, {}, 1, vk::ImageViewType::e2D, &MSDF_FONT_SAMPLER_CREATE_INFO);
 
@@ -170,7 +170,7 @@ public:
     }
     font->texture = std::make_shared<Texture>(std::move(*texResult));
 
-    vk::DescriptorSetAllocateInfo allocInfo{.descriptorPool = m_device->descriptorPool,
+    vk::DescriptorSetAllocateInfo allocInfo{.descriptorPool = m_device->descriptorPool(),
                                             .descriptorSetCount = 1,
                                             .pSetLayouts = &*textureLayout};
     auto setResult = m_device->logical().allocateDescriptorSets(allocInfo);

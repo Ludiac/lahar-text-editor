@@ -14,61 +14,48 @@ namespace {
 constexpr bool ENABLE_VALIDATION_LAYERS = ENABLE_VALIDATION;
 constexpr const char *VALIDATION_LAYER_NAME = "VK_LAYER_KHRONOS_validation";
 constexpr std::array LAYERS = {VALIDATION_LAYER_NAME};
+
+bool isExtensionAvailable(const ImVector<vk::ExtensionProperties> &properties,
+                          const char *extension) {
+  for (decltype(auto) property : properties) {
+    if (std::strcmp(property.extensionName, extension) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool checkValidationLayerSupport(const vk::raii::Context &context) {
+  const auto AVAILABLE_LAYERS = context.enumerateInstanceLayerProperties();
+  return std::ranges::all_of(LAYERS, [&](const char *layer) {
+    return std::ranges::any_of(AVAILABLE_LAYERS, [&](const auto &availableLayer) {
+      return std::strcmp(layer, availableLayer.layerName) == 0;
+    });
+  });
+}
 } // namespace
 
-vk::Bool32
-debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-              vk::DebugUtilsMessageTypeFlagsEXT messageType,
-              const vk::DebugUtilsMessengerCallbackDataEXT *pCallbackData,
-              void * /*unused*/) {
+vk::Bool32 debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+                         vk::DebugUtilsMessageTypeFlagsEXT messageType,
+                         const vk::DebugUtilsMessengerCallbackDataEXT *pCallbackData,
+                         void * /*unused*/) {
   std::println("Validation Layer: {}\n", pCallbackData->pMessage);
   return vk::False;
 }
 
-export struct VulkanInstance {
-  vk::raii::Instance instance{nullptr};
-  vk::raii::DebugUtilsMessengerEXT debugMessenger{nullptr};
-
-private:
-  static bool
-  isExtensionAvailable(const ImVector<vk::ExtensionProperties> &properties,
-                       const char *extension) {
-    for (decltype(auto) property : properties) {
-      if (std::strcmp(property.extensionName, extension) == 0) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  static bool checkValidationLayerSupport(const vk::raii::Context &context) {
-    const auto AVAILABLE_LAYERS = context.enumerateInstanceLayerProperties();
-    return std::ranges::all_of(LAYERS, [&](const char *layer) {
-      return std::ranges::any_of(
-          AVAILABLE_LAYERS, [&](const auto &availableLayer) {
-            return std::strcmp(layer, availableLayer.layerName) == 0;
-          });
-    });
-  }
-
-public:
-  [[nodiscard]] VkInstance getCHandle() const { return *instance; }
-
-  // Access via ->
-  auto operator->() { return &instance; }
-  auto operator->() const { return &instance; }
-  // Implicit conversion to underlying type
-  operator vk::raii::Instance &() { return instance; }
-  operator const vk::raii::Instance &() const { return instance; }
+export class VulkanInstance {
+  vk::raii::Instance m_instance{nullptr};
 
   [[nodiscard]] std::expected<void, std::string> setupDebugMessenger() {
     if constexpr (!ENABLE_VALIDATION_LAYERS) {
       return {};
     }
-    if (auto expected = instance.createDebugUtilsMessengerEXT({
-            .messageSeverity =
-                vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
-                vk::DebugUtilsMessageSeverityFlagBitsEXT::eError,
+
+    vk::raii::DebugUtilsMessengerEXT debugMessenger{nullptr};
+
+    if (auto expected = m_instance.createDebugUtilsMessengerEXT({
+            .messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+                               vk::DebugUtilsMessageSeverityFlagBitsEXT::eError,
             .messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
                            vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
                            vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance,
@@ -83,12 +70,21 @@ public:
     }
   }
 
+public:
+  [[nodiscard]] VkInstance getCHandle() const { return *m_instance; }
+
+  // Access via ->
+  auto operator->() { return &m_instance; }
+  auto operator->() const { return &m_instance; }
+  // Implicit conversion to underlying type
+  operator vk::raii::Instance &() { return m_instance; }
+  operator const vk::raii::Instance &() const { return m_instance; }
+
   [[nodiscard]] std::expected<void, std::string> create() {
     vk::raii::Context context;
     if constexpr (ENABLE_VALIDATION_LAYERS) {
       if (!checkValidationLayerSupport(context)) {
-        return std::unexpected(
-            "Validation layers requested but not available!");
+        return std::unexpected("Validation layers requested but not available!");
       }
     }
 
@@ -97,14 +93,13 @@ public:
         .applicationVersion = 0,
         .pEngineName = "No Engine",
         .engineVersion = 0,
-        .apiVersion = vk::makeApiVersion(0, 1, 3, 0),
+        .apiVersion = vk::makeApiVersion(0, 1, 4, 0),
     };
 
     std::vector<const char *> extensions;
     {
       u32 sdlExtensionsCount = 0;
-      const auto *sdlExtensions =
-          SDL_Vulkan_GetInstanceExtensions(&sdlExtensionsCount);
+      const auto *sdlExtensions = SDL_Vulkan_GetInstanceExtensions(&sdlExtensionsCount);
       for (u32 n = 0; n < sdlExtensionsCount; n++) {
         extensions.push_back(sdlExtensions[n]);
       }
@@ -139,12 +134,16 @@ public:
     }
 
     if (auto expected = context.createInstance(createInfo); expected) {
-      instance = std::move(*expected);
+      m_instance = std::move(*expected);
       std::println("Vulkan instance created successfully!");
       return {};
     } else {
       return std::unexpected("Failed to create Vulkan instance: " +
                              vk::to_string(expected.error()));
+    }
+
+    if (auto expected = setupDebugMessenger(); !expected) {
+      return expected;
     }
   }
 };

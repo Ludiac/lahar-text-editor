@@ -18,6 +18,7 @@ import :utils;
 import :TextEditor;
 import :TextView;
 import :text;
+import :TextWidget;
 
 export class TwoDEngine {
 private:
@@ -36,11 +37,10 @@ private:
   std::vector<std::future<std::expected<Font *, std::string>>> m_fontLoadFutures;
   std::mutex m_fontFuturesMutex;
 
-  TextEditor m_textEditor{
-      "Lorem ipsum vulkan\n Lorem ipsum vulkan Lorem\n ipsum vulkan Lorem ipsum "
-      "vulkan Lorem ipsum\n vulkan"};
-  std::unique_ptr<TextView> m_textView;
+  std::vector<std::unique_ptr<TextEditor>> m_textEditors;
+  std::vector<TextWidget> m_textWidgets;
   std::vector<Font *> m_registeredFonts;
+  size_t m_activeWidgetIndex = 0;
 
   [[nodiscard]] std::expected<void, std::string>
   createGraphicsPipelines(const vk::raii::RenderPass &renderPass,
@@ -187,16 +187,30 @@ public:
   TwoDEngine(VulkanDevice &device, u32 frameCount, BS::thread_pool<> &threadPool)
       : m_device(device), m_frameCount(frameCount), m_thread_pool(threadPool) {}
 
+  TextEditor *getActiveTextEditor() {
+    if (m_textWidgets.empty())
+      return nullptr;
+    return m_textWidgets[m_activeWidgetIndex].getEditor();
+  }
+
+  void cycleActiveWidgetFocus() {
+    if (m_textWidgets.empty())
+      return;
+    m_textWidgets[m_activeWidgetIndex].setActive(false);
+    m_activeWidgetIndex = (m_activeWidgetIndex + 1) % m_textWidgets.size();
+    m_textWidgets[m_activeWidgetIndex].setActive(true);
+  }
+
   std::expected<void, std::string> initialize(const vk::raii::RenderPass &renderPass,
                                               const vk::raii::PipelineCache &pipelineCache) {
-    auto textSystemExpected = TextSystem::create(m_device, m_frameCount, m_device.descriptorPool);
+    auto textSystemExpected = TextSystem::create(m_device, m_frameCount, m_device.descriptorPool());
     if (!textSystemExpected) {
       return std::unexpected(
           std::format("textSystem creation failed: {}", textSystemExpected.error()));
     }
     m_textSystem = std::move(textSystemExpected.value());
 
-    auto uiSystemExpected = UISystem::create(m_device, m_frameCount, m_device.descriptorPool);
+    auto uiSystemExpected = UISystem::create(m_device, m_frameCount, m_device.descriptorPool());
     if (!uiSystemExpected) {
       return std::unexpected(std::format("uiSystem creation failed: {}", uiSystemExpected.error()));
     }
@@ -216,35 +230,9 @@ public:
   void draw(vk::raii::CommandBuffer &cmd, u32 frameIndex, vk::Extent2D swapchainExtent) {
     RenderQueue renderQueue;
 
-    if (m_textView) {
-      m_textView->width = 5000.0;
-      m_textView->height = 3000.0;
-      usize firstLine = m_textView->getFirstVisibleLine();
-      usize numLines = m_textView->getVisibleLineCount();
-      usize lastLine = std::min(firstLine + numLines, m_textEditor.lineCount());
-      f64 currentLineYpos = 100.0;
-
-      if (!m_registeredFonts.empty()) {
-        for (usize i = firstLine; i < lastLine; ++i) {
-          m_textSystem.queueText(m_registeredFonts[0], m_textEditor.getLine(i),
-                                 static_cast<u32>(m_textView->fontPointSize), 200.0,
-                                 currentLineYpos, {1.0, 1.0, 1.0, 1.0});
-          const f64 POINT_SIZE = 36.0;
-          const f64 FONT_UNIT_TO_PIXEL_SCALE =
-              POINT_SIZE * (96.0 / 72.0 * 2) / m_registeredFonts[0]->atlasData.unitsPerEm;
-          const f64 LINE_HEIGHT_PX =
-              m_registeredFonts[0]->atlasData.lineHeight * FONT_UNIT_TO_PIXEL_SCALE;
-          currentLineYpos += (LINE_HEIGHT_PX > 0) ? LINE_HEIGHT_PX : 38.0;
-        }
-      }
+    for (auto &widget : m_textWidgets) {
+      widget.draw(m_uiSystem, m_textSystem);
     }
-
-    m_uiSystem.queueQuad(
-        {.position = {200, 200}, .size = {300, 300}, .color = {0.0, 1.0, 0.0, 1.0}, .zLayer = 0.0});
-    m_uiSystem.queueQuad({.position = {1000, 200},
-                          .size = {100, 300},
-                          .color = {0.0, 0.0, 1.0, 1.0},
-                          .zLayer = 0.0});
 
     m_textSystem.prepareBatches(renderQueue, m_textPipeline, frameIndex, swapchainExtent,
                                 textToggles);
@@ -267,8 +255,22 @@ public:
         if (res) {
           Font *font = *res;
           m_registeredFonts.emplace_back(font);
-          if (!m_textView && (font != nullptr)) {
-            m_textView = std::make_unique<TextView>(m_textEditor, *font);
+          if (m_textWidgets.empty() && (font != nullptr)) {
+            m_textEditors.push_back(std::make_unique<TextEditor>("Hello from TextWidget 1!"));
+            m_textWidgets.emplace_back(m_textEditors.back().get(), font,
+                                       Quad{.position = {100, 100},
+                                            .size = {400, 500},
+                                            .color = {0.1, 0.1, 0.1, 1.0},
+                                            .zLayer = 0.0});
+            m_textWidgets.back().setActive(true);
+
+            m_textEditors.push_back(
+                std::make_unique<TextEditor>("This is the second widget.\n\nCool."));
+            m_textWidgets.emplace_back(m_textEditors.back().get(), font,
+                                       Quad{.position = {600, 100},
+                                            .size = {400, 300},
+                                            .color = {0.1, 0.1, 0.2, 1.0},
+                                            .zLayer = 0.0});
           }
         } else {
           std::println("failed to load font asynchronously: {}", res.error());

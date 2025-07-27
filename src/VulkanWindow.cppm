@@ -41,8 +41,7 @@ u32 getMinImageCountFromPresentMode(vk::PresentModeKHR presentMode) {
   if (presentMode == vk::PresentModeKHR::eMailbox) {
     return 3;
   }
-  if (presentMode == vk::PresentModeKHR::eFifo ||
-      presentMode == vk::PresentModeKHR::eFifoRelaxed) {
+  if (presentMode == vk::PresentModeKHR::eFifo || presentMode == vk::PresentModeKHR::eFifoRelaxed) {
     return 2;
   }
   if (presentMode == vk::PresentModeKHR::eImmediate) {
@@ -90,7 +89,7 @@ public:
     const vk::PresentModeKHR REQUESTED_PRESENT_MODES[] = {vk::PresentModeKHR::eFifo};
 
     m_surfaceFormat = selectSurfaceFormat(m_device->physical(), REQUESTED_FORMATS,
-                                         vk::ColorSpaceKHR::eSrgbNonlinear);
+                                          vk::ColorSpaceKHR::eSrgbNonlinear);
     m_presentMode = selectPresentMode(m_device->physical(), REQUESTED_PRESENT_MODES);
   }
   VulkanWindow() = default;
@@ -110,33 +109,31 @@ public:
                                                                 u32 minImageCount = 0) {
     if (*m_device->logical()) {
       m_device->logical().waitIdle();
-}
+    }
 
     if (auto result = createSwapchain(extent, minImageCount); !result) {
       return std::unexpected("Swapchain creation failed: " + result.error());
-}
+    }
     if (auto result = createImageViews(); !result) {
       return std::unexpected("ImageView creation failed: " + result.error());
-}
-    // New: Create semaphores for each swapchain image
+    }
     if (auto result = createSwapchainSyncObjects(); !result) {
       return std::unexpected("Swapchain sync objects creation failed: " + result.error());
-}
+    }
 
     if (auto result = createDepthResources(); !result) {
       return std::unexpected("Depth resources creation failed: " + result.error());
-}
+    }
     if (auto result = createRenderPass(); !result) {
       return std::unexpected("RenderPass creation failed: " + result.error());
-}
+    }
     if (auto result = createFramebuffers(); !result) {
       return std::unexpected("Framebuffer creation failed: " + result.error());
-}
+    }
     if (m_firstCreation) {
-      // Renamed createSyncObjects to createPerFrameSyncObjects and call only once
       if (auto result = createPerFrameSyncObjects(); !result) {
         return std::unexpected("Per-frame sync objects creation failed: " + result.error());
-}
+      }
       m_firstCreation = false;
     }
 
@@ -238,7 +235,7 @@ private:
         // Signal the presentCompleteSemaphore for the *current acquired image*
         .pSignalSemaphores = &*m_swapchainFrames[m_imageIndex].presentCompleteSemaphore};
 
-    m_device->queue.submit({submitInfo}, *frame.fence);
+    m_device->graphicsQueue()->submit({submitInfo}, *frame.fence);
     return {};
   }
 
@@ -253,7 +250,7 @@ private:
         .pSwapchains = &*m_swapchain,
         .pImageIndices = &m_imageIndex};
 
-    auto result = m_device->queue.presentKHR(presentInfo);
+    auto result = m_device->graphicsQueue()->presentKHR(presentInfo);
     m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     return result;
   }
@@ -265,7 +262,7 @@ private:
     const auto AVAIL_FORMATS = physicalDevice.getSurfaceFormatsKHR(*m_surface);
     if (AVAIL_FORMATS.empty()) {
       return {};
-}
+    }
     if (AVAIL_FORMATS.size() == 1 && AVAIL_FORMATS[0].format == vk::Format::eUndefined) {
       return vk::SurfaceFormatKHR{.format = requestFormats.front(),
                                   .colorSpace = requestColorSpace};
@@ -392,17 +389,18 @@ private:
     if (m_depthFormat == vk::Format::eUndefined) {
       return std::unexpected("Failed to find suitable depth format.");
     }
-    vk::ImageCreateInfo imageCi{
-        .imageType = vk::ImageType::e2D,
-        .format = m_depthFormat,
-        .extent = vk::Extent3D{.width=m_swapchainExtent.width, .height=m_swapchainExtent.height, .depth=1},
-        .mipLevels = 1,
-        .arrayLayers = 1,
-        .samples = vk::SampleCountFlagBits::e1,
-        .tiling = vk::ImageTiling::eOptimal,
-        .usage = vk::ImageUsageFlagBits::eDepthStencilAttachment,
-        .sharingMode = vk::SharingMode::eExclusive,
-        .initialLayout = vk::ImageLayout::eUndefined};
+    vk::ImageCreateInfo imageCi{.imageType = vk::ImageType::e2D,
+                                .format = m_depthFormat,
+                                .extent = vk::Extent3D{.width = m_swapchainExtent.width,
+                                                       .height = m_swapchainExtent.height,
+                                                       .depth = 1},
+                                .mipLevels = 1,
+                                .arrayLayers = 1,
+                                .samples = vk::SampleCountFlagBits::e1,
+                                .tiling = vk::ImageTiling::eOptimal,
+                                .usage = vk::ImageUsageFlagBits::eDepthStencilAttachment,
+                                .sharingMode = vk::SharingMode::eExclusive,
+                                .initialLayout = vk::ImageLayout::eUndefined};
     vma::AllocationCreateInfo imageAllocInfo{.usage = vma::MemoryUsage::eAutoPreferDevice};
     auto vmaImageResult = m_device->createImageVMA(imageCi, imageAllocInfo);
     if (!vmaImageResult) {
@@ -508,19 +506,19 @@ private:
     if (m_useDynamicRendering) {
       for (auto &frame : m_swapchainFrames) {
         frame.framebuffer.clear();
-}
+      }
       return {};
     }
     for (auto &frame : m_swapchainFrames) {
       frame.framebuffer.clear();
       std::array<vk::ImageView, 2> attachments = {*frame.backbufferView, *m_depthImageView};
       const vk::FramebufferCreateInfo CREATE_INFO = {.renderPass = *m_renderPass,
-                                                    .attachmentCount =
-                                                        static_cast<u32>(attachments.size()),
-                                                    .pAttachments = attachments.data(),
-                                                    .width = m_swapchainExtent.width,
-                                                    .height = m_swapchainExtent.height,
-                                                    .layers = 1};
+                                                     .attachmentCount =
+                                                         static_cast<u32>(attachments.size()),
+                                                     .pAttachments = attachments.data(),
+                                                     .width = m_swapchainExtent.width,
+                                                     .height = m_swapchainExtent.height,
+                                                     .layers = 1};
 
       auto expected = m_device->logical().createFramebuffer(CREATE_INFO);
       if (!expected) {
@@ -536,7 +534,7 @@ private:
     for (auto &frame : m_perFrame) {
       if (auto pool = m_device->logical().createCommandPool(
               {.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-               .queueFamilyIndex = m_device->queueFamily});
+               .queueFamilyIndex = m_device->graphicsQueue().queueFamily()});
           pool) {
         frame.commandPool = std::move(*pool);
       } else {
@@ -544,8 +542,8 @@ private:
       }
       if (auto buffers =
               m_device->logical().allocateCommandBuffers({.commandPool = *frame.commandPool,
-                                                         .level = vk::CommandBufferLevel::ePrimary,
-                                                         .commandBufferCount = 1});
+                                                          .level = vk::CommandBufferLevel::ePrimary,
+                                                          .commandBufferCount = 1});
           buffers) {
         frame.commandBuffer = std::move(buffers->front());
       } else {

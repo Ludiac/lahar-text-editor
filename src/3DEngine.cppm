@@ -69,7 +69,7 @@ private:
 public:
   ThreeDEngine(VulkanDevice &device, u32 frameCount, BS::thread_pool<> &threadPool)
       : m_device(device), m_frameCount(frameCount), m_thread_pool(threadPool), m_scene(frameCount) {
-    m_textureStore = std::make_unique<TextureStore>(device, device.queue);
+    m_textureStore = std::make_unique<TextureStore>(device, device.graphicsQueue());
   }
   // --- Public API ---
 
@@ -149,7 +149,7 @@ public:
 
   void onSwapchainRecreated(u32 newFrameCount) {
     m_frameCount = newFrameCount;
-    m_scene.setImageCount(newFrameCount, m_device.descriptorPool, m_combinedMeshLayout);
+    m_scene.setImageCount(newFrameCount, m_device.descriptorPool(), m_combinedMeshLayout);
     // Re-create frame-dependent resources
     setupSceneLights();
     setupShaderToggles();
@@ -231,7 +231,7 @@ private:
 
   void allocateSceneDescriptorSets() {
     std::vector<vk::DescriptorSetLayout> layouts(m_frameCount, *m_sceneLayout);
-    vk::DescriptorSetAllocateInfo allocInfo{.descriptorPool = *m_device.descriptorPool,
+    vk::DescriptorSetAllocateInfo allocInfo{.descriptorPool = *m_device.descriptorPool(),
                                             .descriptorSetCount = m_frameCount,
                                             .pSetLayouts = layouts.data()};
     m_sceneDescriptorSets = m_device.logical().allocateDescriptorSets(allocInfo).value();
@@ -377,7 +377,7 @@ private:
       m_appOwnedMeshes.emplace_back(std::move(axisMesh));
       m_scene.createNode(
           {.mesh = m_appOwnedMeshes.back().get(), .pipeline = linePipeline, .name = name + "_Node"},
-          m_device.descriptorPool, m_combinedMeshLayout);
+          m_device.descriptorPool(), m_combinedMeshLayout);
     };
 
     createAxis("X_Axis", {-axisLength, 0, 0}, {axisLength, 0, 0}, {255, 0, 0, 255}, {0, 1, 0});

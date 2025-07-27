@@ -40,12 +40,15 @@ public:
   /**
    * @brief Constructs a TextView.
    * @param editor A reference to the TextEditor model.
-   * @param font A reference to the Font used for metrics.
+   * @param font A pointer to the Font used for metrics.
    */
-  TextView(TextEditor &editor, Font &font, f64 pointSize = 36)
-      : m_editor(editor), m_font(font), fontPointSize(pointSize) {}
+  TextView(TextEditor &editor, Font *font, f64 pointSize = 36)
+      : m_editor(editor), m_font(font), m_fontPointSize(pointSize) {}
 
   // --- Configuration ---
+
+  void setFont(Font* font) { m_font = font; }
+  [[nodiscard]] Font* getFont() const { return m_font; }
 
   /**
    * @brief Scrolls the view vertically by a number of lines.
@@ -54,11 +57,11 @@ public:
   void scroll(i32 deltaLines) {
     if (deltaLines > 0) {
       usize maxFirstLine = m_editor.lineCount() > 0 ? m_editor.lineCount() - 1 : 0;
-      m_first_visible_line = std::min(m_first_visible_line + (usize)deltaLines, maxFirstLine);
+      m_firstVisibleLine = std::min(m_firstVisibleLine + (usize)deltaLines, maxFirstLine);
     } else if (deltaLines < 0) {
       usize scrollAmount = -deltaLines;
-      m_first_visible_line =
-          (m_first_visible_line > scrollAmount) ? m_first_visible_line - scrollAmount : 0;
+      m_firstVisibleLine =
+          (m_firstVisibleLine > scrollAmount) ? m_firstVisibleLine - scrollAmount : 0;
     }
   }
 
@@ -96,7 +99,7 @@ public:
         return styleIt->style;
       }
     }
-    return m_default_style; // Return default if no style applies
+    return m_defaultStyle; // Return default if no style applies
   }
 
   // --- Data Retrieval for Rendering ---
@@ -104,36 +107,36 @@ public:
   /**
    * @return The starting line index of the visible area.
    */
-  [[nodiscard]] usize getFirstVisibleLine() const { return m_first_visible_line; }
+  [[nodiscard]] usize getFirstVisibleLine() const { return m_firstVisibleLine; }
 
   /**
    * @return The number of lines that can fit in the view's current height.
    */
   [[nodiscard]] usize getVisibleLineCount() const {
-    if (m_font.atlasData.lineHeight <= 0) {
+    if (!m_font || m_font->atlasData.lineHeight <= 0) {
       return 20; // Fallback
     }
     // This is a simplified calculation. A real implementation would use font metrics.
     const f64 FONT_UNIT_TO_PIXEL_SCALE =
-        fontPointSize * (96.0 / 72.0 * 4) / m_font.atlasData.unitsPerEm;
-    const f64 LINE_HEIGHT_PX = m_font.atlasData.lineHeight * FONT_UNIT_TO_PIXEL_SCALE;
+        m_fontPointSize * (96.0 / 72.0 * 4) / m_font->atlasData.unitsPerEm;
+    const f64 LINE_HEIGHT_PX = m_font->atlasData.lineHeight * FONT_UNIT_TO_PIXEL_SCALE;
 
-    return static_cast<usize>(height / LINE_HEIGHT_PX);
+    return static_cast<usize>(m_height / LINE_HEIGHT_PX);
   }
 
-  f64 width = 0.0;
-  f64 height = 0.0;
-  f64 fontPointSize = 36.0;
+  f64 m_width = 0.0;
+  f64 m_height = 0.0;
+  f64 m_fontPointSize = 36.0;
 
 private:
   TextEditor &m_editor;
-  Font &m_font;
+  Font *m_font;
 
   // Viewport state
-  usize m_first_visible_line = 0;
-  f32 m_horizontal_scroll_offset_px = 0.0;
+  usize m_firstVisibleLine = 0;
+  f32 m_horizontalScrollOffsetPx = 0.0;
 
   // Styling information
-  TextStyle m_default_style;
+  TextStyle m_defaultStyle;
   std::vector<StyledRange> m_styles;
 };

@@ -95,6 +95,11 @@ public:
 
     // 4. OPTIMIZATION: Incrementally update the line cache
     updateLineCacheForInsert(pos, text);
+
+    // 5. Update cursor if necessary
+    if (m_cursor_pos > pos) {
+        m_cursor_pos += text.length();
+    }
   }
 
   /**
@@ -162,6 +167,11 @@ public:
     }
 
     m_length -= length;
+
+    // 3. Update cursor if it was in the deleted range
+    if (m_cursor_pos > pos) {
+        m_cursor_pos = (m_cursor_pos > pos + length) ? m_cursor_pos - length : pos;
+    }
   }
 
   // --- Undo/Redo ---
@@ -237,6 +247,55 @@ public:
 
   [[nodiscard]] size_t length() const { return m_length; }
   [[nodiscard]] size_t lineCount() const { return m_line_starts.size(); }
+  [[nodiscard]] size_t getCursorPosition() const { return m_cursor_pos; }
+
+  // --- Cursor and High-Level Editing ---
+
+  void moveCursor(size_t pos) { m_cursor_pos = std::min(pos, m_length); }
+
+  void moveCursorLeft() {
+    if (m_cursor_pos > 0) {
+      m_cursor_pos--;
+    }
+  }
+
+  void moveCursorRight() {
+    if (m_cursor_pos < m_length) {
+      m_cursor_pos++;
+    }
+  }
+
+  void insert(std::string_view text) {
+    insert(m_cursor_pos, text);
+    m_cursor_pos += text.length();
+  }
+
+  void backspace() {
+    if (m_cursor_pos > 0) {
+      remove(m_cursor_pos - 1, 1);
+      // remove() already handles cursor update
+    }
+  }
+
+  void newline() {
+    insert(m_cursor_pos, "\n");
+    m_cursor_pos++;
+  }
+
+  [[nodiscard]] std::pair<size_t, size_t> getCursorLineCol() const {
+    if (m_line_starts.empty()) {
+      return {0, 0};
+    }
+    // Find the line the cursor is on
+    auto it = std::ranges::upper_bound(m_line_starts, m_cursor_pos);
+    size_t lineIndex = std::distance(m_line_starts.begin(), it) - 1;
+
+    // Calculate the column
+    size_t lineStartPos = m_line_starts[lineIndex];
+    size_t colIndex = m_cursor_pos - lineStartPos;
+
+    return {lineIndex, colIndex};
+  }
 
 private:
   // --- Internal Helper Methods ---
@@ -413,6 +472,7 @@ private:
   std::unique_ptr<std::string> m_add_buffer;
   PieceList m_pieces;
   usize m_length = 0;
+  usize m_cursor_pos = 0;
 
   // Line cache for efficient display
   std::vector<size_t> m_line_starts;

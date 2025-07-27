@@ -33,22 +33,17 @@ private:
   vk::raii::DescriptorSetLayout m_instanceDataLayout{nullptr};
   std::vector<vk::raii::DescriptorSet> m_instanceDataDescriptorSets;
 
-public:
-  // Constructor now takes a pointer, or converts the reference to a pointer
-  UISystem(VulkanDevice &dev, u32 inFlightFrameCount)
-      : m_device(&dev), m_frameCount(inFlightFrameCount) {}
-  UISystem() = default;
-
   // Private initialization function to handle fallible setup steps.
   [[nodiscard]] std::expected<void, std::string> initialize(const vk::raii::DescriptorPool &pool) {
     // Note: These helper functions are assumed to also return std::expected
     // Pass dereferenced device for helper functions that expect a reference
-    if (auto res = createInstanceBuffers(*m_device, m_frameCount, m_maxQuadsPerFrame, m_instanceBuffers,
-                                         sizeof(UIInstanceData));
+    if (auto res = createInstanceBuffers(*m_device, m_frameCount, m_maxQuadsPerFrame,
+                                         m_instanceBuffers, sizeof(UIInstanceData));
         !res) {
       return std::unexpected("Failed to create UI instance buffers: " + res.error());
     }
-    if (auto res = createStaticQuadBuffers(*m_device, m_staticVertexBuffer, m_staticIndexBuffer); !res) {
+    if (auto res = createStaticQuadBuffers(*m_device, m_staticVertexBuffer, m_staticIndexBuffer);
+        !res) {
       return std::unexpected("Failed to create static quad buffers: " + res.error());
     }
     if (auto res = createInstanceDataDescriptorSetLayout(); !res) {
@@ -59,6 +54,13 @@ public:
     }
     return {};
   }
+
+  // Constructor now takes a pointer, or converts the reference to a pointer
+  UISystem(VulkanDevice &dev, u32 inFlightFrameCount)
+      : m_device(&dev), m_frameCount(inFlightFrameCount) {}
+
+public:
+  UISystem() = default;
 
   // Factory function for safe, two-phase initialization.
   // Returns a fully initialized object by value or an error.
@@ -93,6 +95,8 @@ public:
   // This method prepares the data and adds a RenderBatch to the queue.
   void prepareBatches(RenderQueue &queue, const VulkanPipeline &uiPipeline, u32 frameIndex,
                       vk::Extent2D windowSize) {
+    ENSURE_INIT(m_device);
+
     glm::mat4 ortho = glm::ortho(0.0F, (float)windowSize.width, 0.0F, (float)windowSize.height);
 
     if (frameIndex >= m_frameCount || m_queuedInstances.empty()) {
@@ -107,8 +111,8 @@ public:
       // Log an error or resize the buffer (more complex)
       return;
     }
-    std::memcpy(static_cast<char *>(currentInstanceBuffer.getMappedData()), m_queuedInstances.data(),
-                dataSize);
+    std::memcpy(static_cast<char *>(currentInstanceBuffer.getMappedData()),
+                m_queuedInstances.data(), dataSize);
     RenderBatch batch{
         .sortKey = 100, // UI background elements could have a low sort key
         .pipeline = &uiPipeline.pipeline,

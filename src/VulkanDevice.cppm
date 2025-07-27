@@ -12,73 +12,85 @@ import vk_mem_alloc_hpp;
 import :VMA;
 import :utils;
 
+namespace {
+static u32 selectQueueFamilyIndex(const vk::raii::PhysicalDevice &physicalDevice) {
+  auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
+
+  for (u32 i = 0; i < queueFamilyProperties.size(); i++) {
+    if (queueFamilyProperties[i].queueFlags & vk::QueueFlagBits::eGraphics) {
+      return i;
+    }
+  }
+
+  return (u32)-1;
+}
+
+class VulkanQueue {
+public:
+  VulkanQueue() = default;
+
+  std::expected<void, std::string> create(const vk::raii::Device &device, uint32_t familyIndex,
+                                          uint32_t queueIndex = 0) {
+    ENSURE_INIT(*device);
+
+    if (auto expected = device.getQueue(familyIndex, 0); expected) {
+      m_queue = std::move(*expected);
+    } else {
+      return std::unexpected(std::format("error with queue {}", vk::to_string(expected.error())));
+    }
+
+    m_familyIndex = familyIndex;
+
+    return {};
+  }
+
+  auto operator->() { return &m_queue; }
+  auto operator->() const { return &m_queue; }
+  operator vk::raii::Queue &() { return m_queue; }
+  operator const vk::raii::Queue &() const { return m_queue; }
+  const vk::Queue &operator*() const noexcept { return *m_queue; }
+
+  [[nodiscard]] u32 queueFamily() const { return m_familyIndex; }
+
+private:
+  vk::raii::Queue m_queue{nullptr};
+  u32 m_familyIndex{static_cast<uint32_t>(-1)};
+};
+} // namespace
+
 export struct BufferResources {
   vk::raii::Buffer buffer{nullptr};
   vk::raii::DeviceMemory memory{nullptr};
 };
 
-export struct VulkanDevice {
-private:
+export class VulkanDevice {
   vk::raii::PhysicalDevice m_physicalDevice{nullptr};
   vk::raii::Device m_device{nullptr};
-  const vk::raii::Instance &m_instance;
+  vk::raii::DescriptorPool m_descriptorPool{nullptr};
   vma::Allocator m_vmaAllocator;
   vk::raii::CommandPool m_transientCommandPool{nullptr};
 
-public:
-  vk::PhysicalDeviceLimits limits;
-  u32 queueFamily = (u32)-1;
-  vk::raii::Queue queue{nullptr};
-  vk::raii::DescriptorPool descriptorPool{nullptr};
+  vk::PhysicalDeviceLimits m_limits;
+  VulkanQueue m_gfxQueue{};
 
-  VulkanDevice(const vk::raii::Instance &instance) : m_instance(instance) {}
-
-private:
-  static u32 selectQueueFamilyIndex(const vk::raii::PhysicalDevice &physicalDevice) {
-    auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
-
-    for (u32 i = 0; i < queueFamilyProperties.size(); i++) {
-      if (queueFamilyProperties[i].queueFlags & vk::QueueFlagBits::eGraphics) {
-        return i;
-      }
-    }
-
-    return (u32)-1;
-  }
-
-public:
-  [[nodiscard]] const vk::raii::Device &logical() const { return m_device; }
-  [[nodiscard]] const vk::raii::PhysicalDevice &physical() const { return m_physicalDevice; }
-  [[nodiscard]] const vma::Allocator &allocator() const { return m_vmaAllocator; }
-
-  ~VulkanDevice() { m_vmaAllocator.destroy(); }
-
-  ImGui_ImplVulkan_InitInfo initInfo() {
-    return ImGui_ImplVulkan_InitInfo{
-        .PhysicalDevice = *m_physicalDevice,
-        .Device = *m_device,
-        .QueueFamily = queueFamily,
-        .Queue = *queue,
-        .DescriptorPool = *descriptorPool,
-    };
-  }
-
-  [[nodiscard]] std::expected<void, std::string> pickPhysicalDevice() {
-    auto expected = m_instance.enumeratePhysicalDevices();
+  [[nodiscard]] std::expected<void, std::string>
+  pickPhysicalDevice(const vk::raii::Instance &instance) {
+    auto expected = instance.enumeratePhysicalDevices();
     if (expected) {
       if (expected->empty()) {
         return std::unexpected("No Vulkan-compatible physical devices found!");
       }
       m_physicalDevice = std::move(expected->front());
-      limits = m_physicalDevice.getProperties().limits;
+      m_limits = m_physicalDevice.getProperties().limits;
       return {};
     }
     return std::unexpected("Failed to enumerate physical devices: " +
                            vk::to_string(expected.error()));
   }
 
-  [[nodiscard]] std::expected<void, std::string> createLogicalDevice() {
-    queueFamily = selectQueueFamilyIndex(m_physicalDevice);
+  [[nodiscard]] std::expected<void, std::string>
+  createLogicalDevice(const vk::raii::Instance &instance) {
+    auto queueFamily = selectQueueFamilyIndex(m_physicalDevice);
     if (std::cmp_equal(queueFamily, -1)) {
       return std::unexpected("Failed to select queue family index");
     }
@@ -115,10 +127,8 @@ public:
     } else {
       return std::unexpected(std::format("error with device {}", vk::to_string(expected.error())));
     }
-    if (auto expected = m_device.getQueue(queueFamily, 0); expected) {
-      queue = std::move(*expected);
-    } else {
-      return std::unexpected(std::format("error with queue {}", vk::to_string(expected.error())));
+    create if (auto expected = m_gfxQueue.init(m_device, queueFamily, 0); !expected) {
+      return expected;
     }
 
     vk::CommandPoolCreateInfo poolCreateInfo{.flags =
@@ -132,11 +142,51 @@ public:
     }
     m_transientCommandPool = std::move(transientPoolResult.value());
 
-    if (auto expected = createVmaAllocator(m_instance, m_physicalDevice, m_device); expected) {
+    if (auto expected = createVmaAllocator(instance, m_physicalDevice, m_device); expected) {
       m_vmaAllocator = *expected;
       return {};
     }
     return std::unexpected(std::format("Failed to create Vma allocator:"));
+  }
+
+public:
+  ~VulkanDevice() { m_vmaAllocator.destroy(); }
+
+  [[nodiscard]] const vk::raii::Device &logical() const { return m_device; }
+  [[nodiscard]] const vk::raii::PhysicalDevice &physical() const { return m_physicalDevice; }
+  [[nodiscard]] const vma::Allocator &allocator() const { return m_vmaAllocator; }
+  [[nodiscard]] const VulkanQueue &graphicsQueue() const noexcept { return m_gfxQueue; }
+  [[nodiscard]] const vk::PhysicalDeviceLimits &limits() const noexcept { return m_limits; }
+  [[nodiscard]] const vk::raii::DescriptorPool &descriptorPool() const noexcept {
+    return m_descriptorPool;
+  }
+
+  ImGui_ImplVulkan_InitInfo initInfo() {
+    return ImGui_ImplVulkan_InitInfo{
+        .PhysicalDevice = *m_physicalDevice,
+        .Device = *m_device,
+        .QueueFamily = m_gfxQueue.queueFamily(),
+        .Queue = *m_gfxQueue,
+        .DescriptorPool = *m_descriptorPool,
+    };
+  }
+
+  [[nodiscard]] std::expected<void, std::string> create(const vk::raii::Instance &instance) {
+    ENSURE_INIT(*instance);
+
+    if (auto result = pickPhysicalDevice(instance); !result) {
+      return result;
+    }
+
+    if (auto result = createLogicalDevice(instance); !result) {
+      return result;
+    }
+
+    // ideally createDescriptorPool() would be called here but since its impossible to know
+    // imageCount before window creation which itself requires valid vk handles we call it
+    // separately
+
+    return {};
   }
 
   [[nodiscard]] std::expected<void, std::string> createDescriptorPool(u32 imageCountBasedFactor) {
@@ -170,10 +220,10 @@ public:
                                           .poolSizeCount = static_cast<u32>(pool_sizes.size()),
                                           .pPoolSizes = pool_sizes.data()};
 
-    if (*descriptorPool) {
+    if (*m_descriptorPool) {
       // Consider device.waitIdle() here if descriptor sets from the old pool might still be in use.
       // For simplicity, assuming this is called during setup or a controlled resize.
-      descriptorPool.clear();
+      m_descriptorPool.clear();
     }
 
     auto poolResult = m_device.createDescriptorPool(poolInfo);
@@ -186,7 +236,7 @@ public:
                       (pool_sizes.size() > 1 ? pool_sizes[1].descriptorCount : 0),
                       (pool_sizes.size() > 2 ? pool_sizes[2].descriptorCount : 0)));
     }
-    descriptorPool = std::move(poolResult.value());
+    m_descriptorPool = std::move(poolResult.value());
     return {};
   }
 
@@ -297,7 +347,7 @@ public:
 
   [[nodiscard]] std::expected<void, std::string>
   endSingleTimeCommands(vk::raii::CommandBuffer commandBuffer) {
-    if (!*commandBuffer || !*queue || !*m_device) {
+    if (!*commandBuffer || !*m_gfxQueue || !*m_device) {
       return std::unexpected("VulkanDevice: Invalid parameter for endSingleTimeCommands.");
     }
 
@@ -312,7 +362,7 @@ public:
     }
     vk::raii::Fence fence = std::move(*fenceResult);
 
-    queue.submit(submitInfo, *fence);
+    m_gfxQueue->submit(submitInfo, *fence);
 
     vk::Result waitResult = m_device.waitForFences({*fence}, VK_TRUE, UINT64_MAX);
     if (waitResult != vk::Result::eSuccess) {
@@ -346,8 +396,8 @@ public:
 
     vk::SubmitInfo submitInfo{.commandBufferCount = 1, .pCommandBuffers = &*commandBuffer};
 
-    queue.submit(submitInfo, {});
-    queue.waitIdle();
+    m_gfxQueue->submit(submitInfo, {});
+    m_gfxQueue->waitIdle();
 
     return {};
   }

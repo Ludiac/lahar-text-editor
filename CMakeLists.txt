@@ -36,20 +36,6 @@ CPMAddPackage(
     PATCHES ${CMAKE_CURRENT_SOURCE_DIR}/patches/bsThread_pool.patch
 )
 
-# CPMAddPackage(
-#     NAME msdfgen
-#     GITHUB_REPOSITORY Chlumsky/msdfgen
-#     GIT_TAG 0388956
-#     OPTIONS
-#         "MSDFGEN_CORE_ONLY OFF"
-#         "MSDFGEN_BUILD_STANDALONE OFF" # Explicitly disable CLI build
-#         "MSDFGEN_USE_VCPKG OFF"       # Explicitly disable Vcpkg
-#         "MSDFGEN_DISABLE_SVG ON"      # Explicitly disable SVG (and thus tinyxml2)
-#         "MSDFGEN_DISABLE_PNG ON"      # Explicitly disable PNG if not needed
-#         "MSDFGEN_USE_SKIA OFF"        # Explicitly disable Skia if not needed
-# )
-
-
 CPMAddPackage(
     NAME msdfAtlasGen
     GITHUB_REPOSITORY Chlumsky/msdf-atlas-gen
@@ -72,14 +58,6 @@ CPMAddPackage(
     NAME stb
     GITHUB_REPOSITORY nothings/stb
     GIT_TAG 5c205738c191bcb0abc65c4febfa9bd25ff35234 # This is a specific commit for stb_image.h etc.
-    # For header-only libraries like stb, DOWNLOAD_ONLY might be an option
-    # if you manually manage include directories. However, if it has a CMakeLists.txt
-    # that defines a target, it's better to let CPM handle it.
-    # Given stb is typically used as individual headers, often DOWNLOAD_ONLY is fine
-    # if you then add stb_SOURCE_DIR to include_directories.
-    # For simplicity if it doesn't have a good CMake target, DOWNLOAD_ONLY YES
-    # and then target_include_directories(AppModule PRIVATE ${stb_SOURCE_DIR})
-    # Let's assume for now it's fine as is, or it provides a target.
 )
 
 CPMAddPackage(
@@ -139,6 +117,7 @@ target_sources(AppModule
         src/TextSystem.cppm
         src/TextEditor.cppm
         src/TextView.cppm
+        src/TextWidget.cppm
 
         src/3DEngine.cppm
         src/ModelLoader.cppm
@@ -175,8 +154,6 @@ target_include_directories(AppModule PRIVATE
 )
 
 target_link_libraries(AppModule PRIVATE
-    # msdfgen::msdfgen-core
-    # msdfgen::msdfgen-ext
     msdf-atlas-gen::msdf-atlas-gen
     SDL3::SDL3
     Vulkan::Vulkan
