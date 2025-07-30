@@ -257,20 +257,24 @@ public:
           m_registeredFonts.emplace_back(font);
           if (m_textWidgets.empty() && (font != nullptr)) {
             m_textEditors.push_back(std::make_unique<TextEditor>("Hello from TextWidget 1!"));
-            m_textWidgets.emplace_back(m_textEditors.back().get(), font,
-                                       Quad{.position = {100, 100},
-                                            .size = {400, 500},
-                                            .color = {0.1, 0.1, 0.1, 1.0},
-                                            .zLayer = 0.0});
+            m_textWidgets.emplace_back(TextWidgetCreateInfo{.editor = m_textEditors.back().get(),
+                                                            .font = font,
+                                                            .fontPointSize = 36.0,
+                                                            .position = {100.0, 100.0},
+                                                            .size = {.width = 400, .height = 500},
+                                                            .textColor = {1.0, 1.0, 1.0, 1.0},
+                                                            .bgColor = {0.1, 0.1, 0.1, 1.0}});
             m_textWidgets.back().setActive(true);
 
             m_textEditors.push_back(
                 std::make_unique<TextEditor>("This is the second widget.\n\nCool."));
-            m_textWidgets.emplace_back(m_textEditors.back().get(), font,
-                                       Quad{.position = {600, 100},
-                                            .size = {400, 300},
-                                            .color = {0.1, 0.1, 0.2, 1.0},
-                                            .zLayer = 0.0});
+            m_textWidgets.emplace_back(TextWidgetCreateInfo{.editor = m_textEditors.back().get(),
+                                                            .font = font,
+                                                            .fontPointSize = 18.0,
+                                                            .position = {500.0, 100.0},
+                                                            .size = {.width = 400, .height = 300},
+                                                            .textColor = {0.0, 1.0, 1.0, 1.0},
+                                                            .bgColor = {0.2, 0.2, 0.2, 1.0}});
           }
         } else {
           std::println("failed to load font asynchronously: {}", res.error());

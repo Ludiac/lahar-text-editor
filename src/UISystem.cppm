@@ -114,14 +114,14 @@ public:
     std::memcpy(static_cast<char *>(currentInstanceBuffer.getMappedData()),
                 m_queuedInstances.data(), dataSize);
     RenderBatch batch{
-        .sortKey = 100, // UI background elements could have a low sort key
+        .sortKey = 100,
         .pipeline = &uiPipeline.pipeline,
         .pipelineLayout = &uiPipeline.pipelineLayout,
         .instanceDataSet = &m_instanceDataDescriptorSets[frameIndex],
-        .textureSet = nullptr, // No texture for basic UI sheets
+        .textureSet = nullptr,
         .vertexBuffer = &m_staticVertexBuffer,
         .indexBuffer = &m_staticIndexBuffer,
-        .indexCount = 6, // Quad has 6 indices
+        .indexCount = 6,
         .instanceCount = static_cast<u32>(m_queuedInstances.size()),
         .firstInstance = 0,
         .dynamicOffset = 0,

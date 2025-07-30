@@ -24,16 +24,16 @@ template <typename F> struct ScopeGuard {
 // This structure holds all the information needed to render a single character.
 export struct GlyphInfo {
   // Texture coordinates for the glyph in the atlas
-  float uvX0, uvY0, uvX1, uvY1;
+  f64 uvX0, uvY0, uvX1, uvY1;
 
   // Size of the glyph quad in pixels
-  float width, height;
+  f64 width, height;
 
   // The offset from the text cursor's baseline to the glyph's top-left corner
-  float bearingX, bearingY;
+  f64 bearingX, bearingY;
 
   // The horizontal distance to advance the cursor to the next character
-  float advance;
+  f64 advance;
 };
 
 // This struct holds the complete output of the font atlas generation.
@@ -43,13 +43,13 @@ export struct FontAtlasData {
   int atlasWidth{};
   int atlasHeight{};
   std::map<msdfgen::unicode_t, GlyphInfo> glyphs;
-  double pxRange{};    // Store the pixel range for the shader
-  double atlasScale{}; // **NEW**: Store the scale used by the atlas packer
+  f64 pxRange{};    // Store the pixel range for the shader
+  f64 atlasScale{}; // **NEW**: Store the scale used by the atlas packer
 
-  double unitsPerEm{}; // Font design units per EM
-  double ascender{};   // Distance from baseline to highest point
-  double descender{};  // Distance from baseline to lowest point
-  double lineHeight{}; // Recommended line spacing
+  f64 unitsPerEm{}; // Font design units per EM
+  f64 ascender{};   // Distance from baseline to highest point
+  f64 descender{};  // Distance from baseline to lowest point
+  f64 lineHeight{}; // Recommended line spacing
 };
 
 export struct Font {
@@ -97,14 +97,13 @@ createFontAtlasMSDF(const std::string &fontPath) {
   atlasData.lineHeight = metrics.lineHeight;
 
   // --- Configuration ---
-  const double ANGLE_THRESHOLD = 3.0;
-  const double MITER_LIMIT = 1.0;
-  atlasData.pxRange = atlasData.unitsPerEm / 128; // The distance field range in atlas pixels.
+  const f64 ANGLE_THRESHOLD = 3.0;
+  const f64 MITER_LIMIT = 1.0;
+  atlasData.pxRange = atlasData.unitsPerEm / 64; // The distance field range in atlas pixels.
   // atlasData.pxRange = 2.0;
 
-  const std::string FULL_CHARSET = " !,."
-                                   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                                   "abcdefghijklmnopqrstuvwxyz";
+  const std::string FULL_CHARSET = " ?"
+                                   "abcdefghiklmnoprstuv";
   std::string currentCharset = "Vulkan?";
   if (currentCharset.empty()) {
     currentCharset = FULL_CHARSET;
@@ -116,7 +115,7 @@ createFontAtlasMSDF(const std::string &fontPath) {
   for (char cChar : currentCharset) {
     auto c = static_cast<msdfgen::unicode_t>(cChar);
     msdf_atlas::GlyphGeometry glyphGeometry;
-    const double GEOMETRY_SCALE = 0.25; // This is a typical value, adjust if needed
+    const f64 GEOMETRY_SCALE = 1.0; // This is a typical value, adjust if needed
     if (!glyphGeometry.load(font, GEOMETRY_SCALE, c, true)) {
       std::cerr << "Warning: Could not load glyph geometry for character '" << cChar << "'\n";
       continue;
@@ -129,7 +128,7 @@ createFontAtlasMSDF(const std::string &fontPath) {
   // for (char c_char : currentCharset) {
   //   charset.add(static_cast<msdfgen::unicode_t>(c_char));
   // }
-  // double geometryScale = 1.0; // Use a scale of 1.0 for now, the packer will
+  // f64 geometryScale = 1.0; // Use a scale of 1.0 for now, the packer will
   // handle the final scale int num = fontGEometry.loadCharset(font,
   // geometryScale, charset); auto frfr = fontGEometry.getGlyphs();
   // glyphs.assign(frfr.begin(), frfr.end());
@@ -160,8 +159,6 @@ createFontAtlasMSDF(const std::string &fontPath) {
   atlasData.atlasWidth = width;
   atlasData.atlasHeight = height;
 
-  // **NEW**: Store the scale calculated by the packer. This is crucial for
-  // correct rendering.
   atlasData.atlasScale = packer.getScale();
   std::println("DEBUG: Atlas Packer Scale = {}", atlasData.atlasScale);
   std::println("DEBUG: Atlas Dimensions after packing: Width = {}, Height = {}", width, height);
@@ -200,35 +197,35 @@ createFontAtlasMSDF(const std::string &fontPath) {
   // --- Store Glyph Metrics ---
   std::println("DEBUG: Glyph metrics stored. Total glyphs: {}", glyphs.size());
   for (const auto &glyph : glyphs) {
-    double l;
-    double b;
-    double r;
-    double t;
+    f64 l;
+    f64 b;
+    f64 r;
+    f64 t;
     glyph.getQuadPlaneBounds(l, b, r, t);
 
-    double u;
-    double v;
-    double s;
-    double w;
+    f64 u;
+    f64 v;
+    f64 s;
+    f64 w;
     glyph.getQuadAtlasBounds(u, v, s, w);
 
     GlyphInfo info{};
     // Normalize UVs to [0, 1] range
-    info.uvX0 = static_cast<float>(u / atlasData.atlasWidth);
-    info.uvY0 = static_cast<float>(w / atlasData.atlasHeight);
-    info.uvX1 = static_cast<float>(s / atlasData.atlasWidth);
-    info.uvY1 = static_cast<float>(v / atlasData.atlasHeight);
+    info.uvX0 = u / atlasData.atlasWidth;
+    info.uvY0 = v / atlasData.atlasHeight;
+    info.uvX1 = s / atlasData.atlasWidth;
+    info.uvY1 = w / atlasData.atlasHeight;
 
-    // Store glyph plane dimensions (in font units)
-    info.width = static_cast<float>(r - l);
-    info.height = static_cast<float>(t - b);
+    // Store glyph plane dimensions in font units
+    info.width = r - l;
+    info.height = t - b;
 
-    // Store bearing (in font units)
-    info.bearingX = static_cast<float>(l);
-    info.bearingY = static_cast<float>(t);
+    // Store bearing in font units
+    info.bearingX = l;
+    info.bearingY = t;
 
-    // Store advance (in font units)
-    info.advance = static_cast<float>(glyph.getAdvance());
+    // Store advance in font units
+    info.advance = glyph.getAdvance();
 
     atlasData.glyphs[glyph.getCodepoint()] = info;
   }

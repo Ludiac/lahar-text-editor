@@ -204,7 +204,7 @@ export struct ImGuiMenu {
   static void renderMegaMenu(ImGuiMenu &imguiMenu, VulkanWindow &wd, VulkanDevice &device,
                              Camera &camera, Scene &scene, ShaderTogglesUBO &shaderToggles,
                              SceneLightsUBO &lightUBO, TextToggles &textToggles,
-                             i32 fontSizeMultiplier, u32 currentFrameIndex, float frameTime) {
+                             i32 &fontSizeMultiplier, u32 currentFrameIndex, float frameTime) {
 
     // Render the single, combined debug settings window if its flag is true.
     if (imguiMenu.showDebugSettingsWindow) {

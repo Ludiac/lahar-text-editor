@@ -12,7 +12,7 @@ struct VertexInput {
 // Per-instance data coming from the SSBO
 struct UIInstanceData {
     float2 screenPos;
-    float2 scale;
+    uint2 scale;
     float4 color;
     float z_layer;
     float _padding[3];

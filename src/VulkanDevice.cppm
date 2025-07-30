@@ -127,7 +127,8 @@ export class VulkanDevice {
     } else {
       return std::unexpected(std::format("error with device {}", vk::to_string(expected.error())));
     }
-    create if (auto expected = m_gfxQueue.init(m_device, queueFamily, 0); !expected) {
+
+    if (auto expected = m_gfxQueue.create(m_device, queueFamily, 0); !expected) {
       return expected;
     }
 

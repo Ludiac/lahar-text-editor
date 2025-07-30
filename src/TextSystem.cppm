@@ -19,10 +19,10 @@ import :ui;
 
 export struct TextToggles {
   float sdfWeight{0.0};
-  float pxRangeDirectAdditive{0.78};
+  float pxRangeDirectAdditive{0.0};
   i32 antiAliasingMode{2}; // Corresponds to AA_LINEAR by default
-  float startFadePx{0.5};
-  float endFadePx{1.0};
+  float startFadePx{0.1};
+  float endFadePx{0.2};
   i32 numStages{1};
   i32 roundingDirection{2}; // 0=down, 1=up, 2=nearest
 };
@@ -193,25 +193,26 @@ public:
 
   constexpr const static f64 SYSTEM_DPI = 96.0;
   constexpr static f64 INCH = 72.0;
-  constexpr static f64 MULT = SYSTEM_DPI / INCH * 4;
+  constexpr static f64 MULT = SYSTEM_DPI / INCH;
 
-  void queueText(Font *font, const std::string &text, u32 pointSize, f64 x, f64 y,
+  void queueText(Font *font, const std::string &text, f64 pointSize, f64 x, f64 y,
                  const glm::vec4 &color) {
     if (font == nullptr || text.empty()) {
       return;
     }
 
     const auto &metrics = font->atlasData;
-    const f64 BASELINE_Y = y;
 
     auto &instanceVec = m_frameBatch[font];
     f64 cursorX = x;
 
-    const f64 DESIRED_PIXEL_HEIGHT_FOR_EM = static_cast<f64>(pointSize) * MULT;
-    const f64 FONT_UNIT_TO_PIXEL_SCALE =
-        DESIRED_PIXEL_HEIGHT_FOR_EM / static_cast<f64>(metrics.unitsPerEm);
+    const f64 DESIRED_PIXEL_HEIGHT_FOR_EM = pointSize * MULT;
+    const f64 FONT_UNIT_TO_PIXEL_SCALE = DESIRED_PIXEL_HEIGHT_FOR_EM / metrics.unitsPerEm;
 
     for (char c : text) {
+      if (c == '\n') {
+        continue;
+      }
       auto it = metrics.glyphs.find(static_cast<u32>(c));
       if (it == metrics.glyphs.end()) {
         it = metrics.glyphs.find(static_cast<u32>('?')); // Fallback
@@ -222,19 +223,19 @@ public:
 
       const auto &gi = it->second;
 
-      f64 scaledQuadWidthD = static_cast<f64>(gi.width) * FONT_UNIT_TO_PIXEL_SCALE;
-      f64 scaledQuadHeightD = static_cast<f64>(gi.height) * FONT_UNIT_TO_PIXEL_SCALE;
+      f64 scaledQuadWidthD = gi.width * FONT_UNIT_TO_PIXEL_SCALE;
+      f64 scaledQuadHeightD = gi.height * FONT_UNIT_TO_PIXEL_SCALE;
 
-      f64 xposD = cursorX + (static_cast<f64>(gi.bearingX) * FONT_UNIT_TO_PIXEL_SCALE);
-      f64 yposD = BASELINE_Y - (static_cast<f64>(gi.bearingY) * FONT_UNIT_TO_PIXEL_SCALE);
+      f64 xposD = cursorX + gi.bearingX * FONT_UNIT_TO_PIXEL_SCALE;
+      f64 yposD = y - gi.bearingY * FONT_UNIT_TO_PIXEL_SCALE;
 
       f64 shaderPxRange = static_cast<f64>(metrics.pxRange * FONT_UNIT_TO_PIXEL_SCALE);
 
       instanceVec.emplace_back(TextInstanceData{
           .screenPos = {static_cast<float>(xposD), static_cast<float>(yposD)},
           .size = {static_cast<float>(scaledQuadWidthD), static_cast<float>(scaledQuadHeightD)},
-          .uvTopLeft = {gi.uvX0, gi.uvY0},
-          .uvBottomRight = {gi.uvX1, gi.uvY1},
+          .uvTopLeft = {gi.uvX0, gi.uvY1},
+          .uvBottomRight = {gi.uvX1, gi.uvY0},
           .color = color,
           .pxRange = static_cast<float>(shaderPxRange),
       });

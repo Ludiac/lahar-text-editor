@@ -97,9 +97,10 @@ public:
     updateLineCacheForInsert(pos, text);
 
     // 5. Update cursor if necessary
-    if (m_cursor_pos > pos) {
-        m_cursor_pos += text.length();
+    if (m_cursor_pos >= pos) {
+      m_cursor_pos += text.length();
     }
+    m_desired_col = getCursorLineCol().second;
   }
 
   /**
@@ -170,8 +171,9 @@ public:
 
     // 3. Update cursor if it was in the deleted range
     if (m_cursor_pos > pos) {
-        m_cursor_pos = (m_cursor_pos > pos + length) ? m_cursor_pos - length : pos;
+      m_cursor_pos = (m_cursor_pos > pos + length) ? m_cursor_pos - length : pos;
     }
+    m_desired_col = getCursorLineCol().second;
   }
 
   // --- Undo/Redo ---
@@ -246,28 +248,55 @@ public:
   [[nodiscard]] std::string toString() const { return getTextInRange(0, m_length); }
 
   [[nodiscard]] size_t length() const { return m_length; }
-  [[nodiscard]] size_t lineCount() const { return m_line_starts.size(); }
+  [[nodiscard]] size_t lineCount() const {
+    return m_line_starts.empty() ? 1 : m_line_starts.size();
+  }
   [[nodiscard]] size_t getCursorPosition() const { return m_cursor_pos; }
 
   // --- Cursor and High-Level Editing ---
 
-  void moveCursor(size_t pos) { m_cursor_pos = std::min(pos, m_length); }
+  void moveCursor(size_t pos) {
+    m_cursor_pos = std::min(pos, m_length);
+    m_desired_col = getCursorLineCol().second;
+  }
 
   void moveCursorLeft() {
     if (m_cursor_pos > 0) {
       m_cursor_pos--;
+      m_desired_col = getCursorLineCol().second;
     }
   }
 
   void moveCursorRight() {
     if (m_cursor_pos < m_length) {
       m_cursor_pos++;
+      m_desired_col = getCursorLineCol().second;
+    }
+  }
+
+  void moveCursorUp() {
+    auto [line, col] = getCursorLineCol();
+    if (line > 0) {
+      size_t prev_line_idx = line - 1;
+      std::string prev_line = getLine(prev_line_idx);
+      size_t new_col = std::min((size_t)prev_line.length(), m_desired_col);
+      m_cursor_pos = m_line_starts[prev_line_idx] + new_col;
+    }
+  }
+
+  void moveCursorDown() {
+    auto [line, col] = getCursorLineCol();
+    if (line + 1 < lineCount()) {
+      size_t next_line_idx = line + 1;
+      std::string next_line = getLine(next_line_idx);
+      size_t new_col = std::min((size_t)next_line.length(), m_desired_col);
+      m_cursor_pos = m_line_starts[next_line_idx] + new_col;
     }
   }
 
   void insert(std::string_view text) {
     insert(m_cursor_pos, text);
-    m_cursor_pos += text.length();
+    // Position is updated by the other insert overload
   }
 
   void backspace() {
@@ -277,18 +306,16 @@ public:
     }
   }
 
-  void newline() {
-    insert(m_cursor_pos, "\n");
-    m_cursor_pos++;
-  }
+  void newline() { insert(m_cursor_pos, "\n"); }
 
   [[nodiscard]] std::pair<size_t, size_t> getCursorLineCol() const {
     if (m_line_starts.empty()) {
       return {0, 0};
     }
-    // Find the line the cursor is on
+    // Find the line the cursor is on using a reverse iterator or lower_bound
     auto it = std::ranges::upper_bound(m_line_starts, m_cursor_pos);
-    size_t lineIndex = std::distance(m_line_starts.begin(), it) - 1;
+    size_t lineIndex =
+        (it == m_line_starts.begin()) ? 0 : std::distance(m_line_starts.begin(), it) - 1;
 
     // Calculate the column
     size_t lineStartPos = m_line_starts[lineIndex];
@@ -306,11 +333,15 @@ private:
   std::pair<PieceList::iterator, size_t> findPiece(size_t pos) {
     size_t currentPos = 0;
     for (auto it = m_pieces.begin(); it != m_pieces.end(); ++it) {
-      if (currentPos + it->length >= pos) {
-        // Returns a mutable iterator
+      if (currentPos + it->length > pos || (currentPos + it->length == pos && it->length > 0)) {
         return {it, pos - currentPos};
       }
       currentPos += it->length;
+    }
+    // If pos is at the very end of the text, find the last piece.
+    if (pos == m_length && !m_pieces.empty()) {
+      auto last_piece = std::prev(m_pieces.end());
+      return {last_piece, last_piece->length};
     }
     return {m_pieces.end(), 0};
   }
@@ -366,12 +397,14 @@ private:
 
     // Find new newlines in the inserted text
     std::vector<size_t> newLinesInInsert;
-    for (size_t i = 0; i < text.length(); ++i) {
-      if (text[i] == '\n') {
-        if (pos + i + 1 < m_length) {
-          newLinesInInsert.push_back(pos + i + 1);
+    size_t scan_pos = 0;
+    for (char c : text) {
+      if (c == '\n') {
+        if (pos + scan_pos + 1 < m_length) {
+          newLinesInInsert.push_back(pos + scan_pos + 1);
         }
       }
+      scan_pos++;
     }
 
     // Insert new line starts into the cache
@@ -385,9 +418,16 @@ private:
    * @brief Incrementally updates the line cache after a deletion.
    */
   void updateLineCacheForDelete(size_t pos, size_t length) {
+    if (m_line_starts.empty())
+      return;
     // Find the start and end lines affected by the deletion
-    auto startIt = std::ranges::upper_bound(m_line_starts, pos) - 1;
-    auto endIt = std::ranges::upper_bound(m_line_starts, pos + length) - 1;
+    auto startIt = std::ranges::upper_bound(m_line_starts, pos);
+    if (startIt != m_line_starts.begin())
+      --startIt;
+
+    auto endIt = std::ranges::upper_bound(m_line_starts, pos + length);
+    if (endIt != m_line_starts.begin())
+      --endIt;
 
     size_t firstLineIdx = std::distance(m_line_starts.begin(), startIt);
     size_t lastLineIdx = std::distance(m_line_starts.begin(), endIt);
@@ -407,6 +447,8 @@ private:
    * @brief Retrieves a substring of the document.
    */
   [[nodiscard]] std::string getTextInRange(size_t pos, size_t length) const {
+    if (pos >= m_length)
+      return "";
     if (pos + length > m_length) {
       length = m_length - pos;
     }
@@ -446,6 +488,8 @@ private:
       return '\0';
     }
     auto [iter, offset] = findPiece(pos);
+    if (iter == m_pieces.cend())
+      return '\0';
     const std::string *buffer =
         (iter->buffer == BufferType::ORIGINAL) ? m_original_buffer.get() : m_add_buffer.get();
     return (*buffer)[iter->start + offset];
@@ -473,6 +517,7 @@ private:
   PieceList m_pieces;
   usize m_length = 0;
   usize m_cursor_pos = 0;
+  usize m_desired_col = 0; // Remembers the column for vertical movement
 
   // Line cache for efficient display
   std::vector<size_t> m_line_starts;

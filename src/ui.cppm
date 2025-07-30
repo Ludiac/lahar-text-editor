@@ -46,7 +46,7 @@ struct UIQuadVertex {
 
 export struct Quad {
   glm::vec2 position;
-  glm::vec2 size;
+  vk::Extent2D size;
   glm::vec4 color;
   float zLayer;
 };

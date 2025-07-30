@@ -42,13 +42,13 @@ public:
    * @param editor A reference to the TextEditor model.
    * @param font A pointer to the Font used for metrics.
    */
-  TextView(TextEditor &editor, Font *font, f64 pointSize = 36)
-      : m_editor(editor), m_font(font), m_fontPointSize(pointSize) {}
+  TextView(TextEditor &editor, Font *font, f64 pointSize, vk::Extent2D sizeParameter)
+      : m_editor(editor), m_font(font), fontPointSize(pointSize), size(sizeParameter) {}
 
   // --- Configuration ---
 
-  void setFont(Font* font) { m_font = font; }
-  [[nodiscard]] Font* getFont() const { return m_font; }
+  void setFont(Font *font) { m_font = font; }
+  [[nodiscard]] Font *getFont() const { return m_font; }
 
   /**
    * @brief Scrolls the view vertically by a number of lines.
@@ -113,20 +113,24 @@ public:
    * @return The number of lines that can fit in the view's current height.
    */
   [[nodiscard]] usize getVisibleLineCount() const {
-    if (!m_font || m_font->atlasData.lineHeight <= 0) {
-      return 20; // Fallback
-    }
-    // This is a simplified calculation. A real implementation would use font metrics.
     const f64 FONT_UNIT_TO_PIXEL_SCALE =
-        m_fontPointSize * (96.0 / 72.0 * 4) / m_font->atlasData.unitsPerEm;
+        fontPointSize * (96.0 / 72.0) / m_font->atlasData.unitsPerEm;
     const f64 LINE_HEIGHT_PX = m_font->atlasData.lineHeight * FONT_UNIT_TO_PIXEL_SCALE;
 
-    return static_cast<usize>(m_height / LINE_HEIGHT_PX);
+    return static_cast<usize>(size.height / LINE_HEIGHT_PX);
   }
 
-  f64 m_width = 0.0;
-  f64 m_height = 0.0;
-  f64 m_fontPointSize = 36.0;
+  [[nodiscard]] usize maxColumnsInView() const {
+    const f64 FONT_UNIT_TO_PIXEL_SCALE =
+        fontPointSize * (96.0 / 72.0) / m_font->atlasData.unitsPerEm;
+    const f64 AVG_ADVANCE =
+        m_font->atlasData.glyphs.begin()->second.advance * FONT_UNIT_TO_PIXEL_SCALE;
+
+    return static_cast<usize>(size.width / AVG_ADVANCE);
+  }
+
+  vk::Extent2D size;
+  f64 fontPointSize;
 
 private:
   TextEditor &m_editor;

@@ -61,7 +61,6 @@ public:
     vk::Image backbuffer{nullptr};
     vk::raii::ImageView backbufferView{nullptr};
     vk::raii::Framebuffer framebuffer{nullptr};
-    // New: Semaphore to signal that rendering for this specific swapchain image is complete
     vk::raii::Semaphore presentCompleteSemaphore{nullptr};
   };
 
@@ -70,9 +69,6 @@ public:
     vk::raii::CommandBuffer commandBuffer{nullptr};
     vk::raii::Fence fence{nullptr};
     vk::raii::Semaphore imageAcquiredSemaphore{nullptr};
-    // renderCompleteSemaphore is no longer needed here as presentCompleteSemaphore
-    // will be used per swapchain image.
-    // vk::raii::Semaphore renderCompleteSemaphore{nullptr};
   };
 
   // --- Public Interface ---
@@ -183,13 +179,12 @@ public:
   }
 
   // --- Accessors ---
-  [[nodiscard]] vk::Extent2D getExtent() const { return m_swapchainExtent; }
-  [[nodiscard]] vk::raii::RenderPass &getRenderPass() { return m_renderPass; }
-  [[nodiscard]] u32 getImageCount() const { return static_cast<u32>(m_swapchainFrames.size()); }
-  [[nodiscard]] u32 getImageIndex() const { return m_imageIndex; }
-  [[nodiscard]] u32 getCurrentFrame() const { return m_currentFrame; }
-
-  vk::ClearValue clearValue{vk::ClearColorValue(std::array<f32, 4>{0.0, 0.0, 0.0, 1.0})};
+  [[nodiscard]] vk::Extent2D extent() const { return m_swapchainExtent; }
+  [[nodiscard]] const vk::raii::RenderPass &renderPass() { return m_renderPass; }
+  [[nodiscard]] vk::ClearValue clearValue() const { return m_clearValue; }
+  [[nodiscard]] u32 imageCount() const { return static_cast<u32>(m_swapchainFrames.size()); }
+  [[nodiscard]] u32 imageIndex() const { return m_imageIndex; }
+  [[nodiscard]] u32 currentFrame() const { return m_currentFrame; }
 
 private:
   // --- Internal Frame Management ---
@@ -592,6 +587,8 @@ private:
   vk::Format m_depthFormat{};
 
   vk::raii::RenderPass m_renderPass{nullptr};
+
+  vk::ClearValue m_clearValue{vk::ClearColorValue(std::array<f32, 4>{0.0, 0.0, 0.0, 1.0})};
 
   static constexpr u32 MAX_FRAMES_IN_FLIGHT = 2;
   std::array<PerFrame, MAX_FRAMES_IN_FLIGHT> m_perFrame;

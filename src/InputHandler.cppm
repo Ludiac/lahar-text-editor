@@ -68,14 +68,17 @@ private:
     // single-shot actions like changing modes or triggering commands.
     if (keyEvent.repeat != 0) {
       // Allow repeats for navigation and deletion
-      if (m_mode == InputMode::NORMAL &&
+      bool is_nav_key =
           (keyEvent.key == SDLK_H || keyEvent.key == SDLK_L || keyEvent.key == SDLK_K ||
-           keyEvent.key == SDLK_J)) {
-        // Process navigation repeats
+           keyEvent.key == SDLK_J || keyEvent.key == SDLK_UP || keyEvent.key == SDLK_DOWN ||
+           keyEvent.key == SDLK_LEFT || keyEvent.key == SDLK_RIGHT);
+
+      if (is_nav_key) {
+        // Process navigation repeats regardless of mode
       } else if (m_mode == InputMode::INSERT && keyEvent.key == SDLK_BACKSPACE) {
         // Process backspace repeats
       } else {
-        return;
+        return; // Ignore other repeats
       }
     }
 
@@ -103,33 +106,29 @@ private:
   void handleNormalMode(const SDL_KeyboardEvent &keyEvent) {
     if (!m_editor)
       return;
-    // For Vim-like bindings, we use SDL_Keycode (key). This binds to the
-    // character on the key ('h', 'j', 'k', 'l'), which is the expected behavior
-    // for this type of control scheme, regardless of physical keyboard layout.
     switch (keyEvent.key) {
-    // 'i' switches to INSERT mode.
     case SDLK_I:
       setMode(InputMode::INSERT);
       break;
-
-    // --- VIM-LIKE TRAVERSAL (STUBS) ---
     case SDLK_H:
+    case SDLK_LEFT:
       m_editor->moveCursorLeft();
       break;
     case SDLK_L:
+    case SDLK_RIGHT:
       m_editor->moveCursorRight();
       break;
     case SDLK_K:
-      // TODO: m_editor.moveCursorUp();
-      std::println("Normal mode: 'k' pressed (up)");
+    case SDLK_UP:
+      m_editor->moveCursorUp();
       break;
     case SDLK_J:
-      // TODO: m_editor.moveCursorDown();
-      std::println("Normal mode: 'j' pressed (down)");
+    case SDLK_DOWN:
+      m_editor->moveCursorDown();
       break;
     case SDLK_TAB:
-        m_cycleFocusRequested = true;
-        break;
+      m_cycleFocusRequested = true;
+      break;
     default:
       break;
     }
@@ -149,13 +148,25 @@ private:
 
     switch (keyEvent.key) {
     case SDLK_BACKSPACE:
-        // TODO: Handle Ctrl+Backspace for word deletion
-        m_editor->backspace();
+      // TODO: Handle Ctrl+Backspace for word deletion
+      m_editor->backspace();
       break;
     case SDLK_RETURN:
       m_editor->newline();
       break;
-    // Arrow keys could also be handled here for cursor movement within insert mode.
+    // Arrow keys for cursor movement within insert mode.
+    case SDLK_LEFT:
+      m_editor->moveCursorLeft();
+      break;
+    case SDLK_RIGHT:
+      m_editor->moveCursorRight();
+      break;
+    case SDLK_UP:
+      m_editor->moveCursorUp();
+      break;
+    case SDLK_DOWN:
+      m_editor->moveCursorDown();
+      break;
     default:
       break;
     }

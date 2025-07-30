@@ -105,46 +105,45 @@ private:
   }
 
   void frameRender(ImDrawData *drawData, f32 deltaTime) {
-    auto frameStatus = m_wd.renderFrame([&](vk::raii::CommandBuffer &cmd, vk::raii::RenderPass &rp,
-                                            vk::raii::Framebuffer &fb) {
-      // Update and draw 3D scene
-      if (m_threeDEngine) {
-        m_threeDEngine->update(m_wd.getImageIndex(), deltaTime, m_wd.getExtent());
-      }
+    auto frameStatus = m_wd.renderFrame(
+        [&](vk::raii::CommandBuffer &cmd, vk::raii::RenderPass &rp, vk::raii::Framebuffer &fb) {
+          // if (m_threeDEngine) {
+          //   m_threeDEngine->update(m_wd.imageIndex(), deltaTime, m_wd.extent());
+          // }
 
-      if (m_twoDEngine) {
-        m_twoDEngine->update(m_wd.getImageIndex(), deltaTime, m_wd.getExtent());
-      }
+          if (m_twoDEngine) {
+            m_twoDEngine->update(m_wd.imageIndex(), deltaTime, m_wd.extent());
+          }
 
-      std::array<vk::ClearValue, 2> clearValues{};
-      clearValues[0].color = m_wd.clearValue.color;
-      clearValues[1].depthStencil = {.depth = 1.0, .stencil = 0};
+          std::array<vk::ClearValue, 2> clearValues{};
+          clearValues[0].color = m_wd.clearValue().color;
+          clearValues[1].depthStencil = {.depth = 1.0, .stencil = 0};
 
-      cmd.beginRenderPass({.renderPass = rp,
-                           .framebuffer = fb,
-                           .renderArea = {.offset = {.x = 0, .y = 0}, .extent = m_wd.getExtent()},
-                           .clearValueCount = static_cast<u32>(clearValues.size()),
-                           .pClearValues = clearValues.data()},
-                          vk::SubpassContents::eInline);
-      cmd.setViewport(0, vk::Viewport{.x = 0.0,
-                                      .y = 0.0,
-                                      .width = static_cast<f32>(m_wd.getExtent().width),
-                                      .height = static_cast<f32>(m_wd.getExtent().height),
-                                      .minDepth = 0.0,
-                                      .maxDepth = 1.0});
-      cmd.setScissor(0, vk::Rect2D{.offset = {.x = 0, .y = 0}, .extent = m_wd.getExtent()});
+          cmd.beginRenderPass({.renderPass = rp,
+                               .framebuffer = fb,
+                               .renderArea = {.offset = {.x = 0, .y = 0}, .extent = m_wd.extent()},
+                               .clearValueCount = static_cast<u32>(clearValues.size()),
+                               .pClearValues = clearValues.data()},
+                              vk::SubpassContents::eInline);
+          cmd.setViewport(0, vk::Viewport{.x = 0.0,
+                                          .y = 0.0,
+                                          .width = static_cast<f32>(m_wd.extent().width),
+                                          .height = static_cast<f32>(m_wd.extent().height),
+                                          .minDepth = 0.0,
+                                          .maxDepth = 1.0});
+          cmd.setScissor(0, vk::Rect2D{.offset = {.x = 0, .y = 0}, .extent = m_wd.extent()});
 
-      if (m_threeDEngine) {
-        m_threeDEngine->draw(cmd, m_wd.getImageIndex());
-      }
+          // if (m_threeDEngine) {
+          //   m_threeDEngine->draw(cmd, m_wd.imageIndex());
+          // }
 
-      if (m_twoDEngine) {
-        m_twoDEngine->draw(cmd, m_wd.getImageIndex(), m_wd.getExtent());
-      }
+          if (m_twoDEngine) {
+            m_twoDEngine->draw(cmd, m_wd.imageIndex(), m_wd.extent());
+          }
 
-      ImGui_ImplVulkan_RenderDrawData(drawData, *cmd);
-      cmd.endRenderPass();
-    });
+          ImGui_ImplVulkan_RenderDrawData(drawData, *cmd);
+          cmd.endRenderPass();
+        });
 
     if (frameStatus == VulkanWindow::FrameStatus::ResizeNeeded) {
       m_swapChainRebuild = true;
@@ -159,37 +158,6 @@ private:
     SDL_GetWindowSize(window, &width, &height);
     return {.width = static_cast<u32>(width > 0 ? width : 1),
             .height = static_cast<u32>(height > 0 ? height : 1)};
-  }
-
-  void readKeyboard(f32 deltaTime, SDL_Window *sdlWindow) {
-    static bool isFullscreen = false;
-    const auto *const KEYSTATE = SDL_GetKeyboardState(nullptr);
-    if (m_threeDEngine) {
-      auto &camera = m_threeDEngine->getCamera();
-      f32 velocity = camera.movementSpeed * deltaTime;
-      if (KEYSTATE[SDL_SCANCODE_W]) {
-        camera.position += camera.front * velocity;
-      }
-      if (KEYSTATE[SDL_SCANCODE_S]) {
-        camera.position -= camera.front * velocity;
-      }
-      if (KEYSTATE[SDL_SCANCODE_A]) {
-        camera.position -= camera.right * velocity;
-      }
-      if (KEYSTATE[SDL_SCANCODE_D]) {
-        camera.position += camera.right * velocity;
-      }
-      if (KEYSTATE[SDL_SCANCODE_SPACE]) {
-        camera.position += camera.worldUp * velocity;
-      }
-      if (KEYSTATE[SDL_SCANCODE_LCTRL]) {
-        camera.position -= camera.worldUp * velocity;
-      }
-    }
-    if (KEYSTATE[SDL_SCANCODE_F11]) {
-      isFullscreen = !isFullscreen;
-      SDL_SetWindowFullscreen(sdlWindow, isFullscreen);
-    }
   }
 
   void mainLoop(SDL_Window *sdlWindow) {
@@ -249,12 +217,8 @@ private:
 
       if (m_twoDEngine) {
         m_twoDEngine->processFontLoads();
+        m_inputHandler.setEditor(m_twoDEngine->getActiveTextEditor()); // crutch
       }
-      // // NEW: Only allow camera movement if not in INSERT mode.
-      // // This prevents typing 'w' from moving the camera.
-      // if (m_threeDEngine && m_inputHandler.getMode() != InputMode::INSERT) {
-      //   readKeyboard(deltaTime, sdlWindow);
-      // }
 
       if ((SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_MINIMIZED) != 0U) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -275,10 +239,10 @@ private:
           done = true; // For now, we'll exit.
         }
         if (m_threeDEngine) {
-          m_threeDEngine->onSwapchainRecreated(m_wd.getImageCount());
+          m_threeDEngine->onSwapchainRecreated(m_wd.imageCount());
         }
         if (m_twoDEngine) {
-          m_twoDEngine->onSwapchainRecreated(m_wd.getImageCount());
+          m_twoDEngine->onSwapchainRecreated(m_wd.imageCount());
         }
         m_swapChainRebuild = false;
       }
@@ -290,8 +254,7 @@ private:
       m_imguiMenu.renderMegaMenu(m_imguiMenu, m_wd, m_device, m_threeDEngine->getCamera(),
                                  m_threeDEngine->getScene(), m_threeDEngine->getShaderToggles(),
                                  m_threeDEngine->getLightUbo(), m_twoDEngine->textToggles,
-                                 m_twoDEngine->fontSizeMultiplier, m_wd.getCurrentFrame(),
-                                 deltaTime);
+                                 m_twoDEngine->fontSizeMultiplier, m_wd.currentFrame(), deltaTime);
 
       // NEW: Render a status window to show the current input mode.
       {
@@ -327,27 +290,26 @@ public:
     u32 numMeshesEstimate = 100;
     // Assume device.createDescriptorPool also returns std::expected
     auto createDescriptorPoolResult =
-        m_device.createDescriptorPool(static_cast<u32>(m_wd.getImageCount()) * numMeshesEstimate);
+        m_device.createDescriptorPool(static_cast<u32>(m_wd.imageCount()) * numMeshesEstimate);
     if (!createDescriptorPoolResult) {
       std::println("Failed to create descriptor pool: {}", createDescriptorPoolResult.error());
       return 1;
     }
 
     // Initialize Engines
-    m_threeDEngine = std::make_unique<ThreeDEngine>(m_device, m_wd.getImageCount(), m_thread_pool);
+    m_threeDEngine = std::make_unique<ThreeDEngine>(m_device, m_wd.imageCount(), m_thread_pool);
     // Assume threeDEngine->initialize also returns std::expected
-    if (auto res = m_threeDEngine->initialize(m_wd.getRenderPass(), m_pipelineCache); !res) {
+    if (auto res = m_threeDEngine->initialize(m_wd.renderPass(), m_pipelineCache); !res) {
       std::println("3D engine initialization failed: {}", res.error());
       return 1;
     }
     m_threeDEngine->loadInitialAssets();
 
-    m_twoDEngine = std::make_unique<TwoDEngine>(m_device, m_wd.getImageCount(), m_thread_pool);
-    if (auto res = m_twoDEngine->initialize(m_wd.getRenderPass(), m_pipelineCache); !res) {
+    m_twoDEngine = std::make_unique<TwoDEngine>(m_device, m_wd.imageCount(), m_thread_pool);
+    if (auto res = m_twoDEngine->initialize(m_wd.renderPass(), m_pipelineCache); !res) {
       std::println("2D engine initialization failed: {}", res.error());
       return 1;
     }
-    m_inputHandler.setEditor(m_twoDEngine->getActiveTextEditor());
 
     // Setup ImGui
     IMGUI_CHECKVERSION();
@@ -356,9 +318,9 @@ public:
     ImGui_ImplSDL3_InitForVulkan(sdlWindow);
     ImGui_ImplVulkan_InitInfo initInfo = m_device.initInfo();
     initInfo.Instance = m_instance.getCHandle();
-    initInfo.RenderPass = *m_wd.getRenderPass();
+    initInfo.RenderPass = *m_wd.renderPass();
     initInfo.MinImageCount = MIN_IMAGE_COUNT;
-    initInfo.ImageCount = static_cast<u32>(m_wd.getImageCount());
+    initInfo.ImageCount = static_cast<u32>(m_wd.imageCount());
     initInfo.PipelineCache = *m_pipelineCache;
     initInfo.CheckVkResultFn = checkVkResultForImgui;
     ImGui_ImplVulkan_Init(&initInfo);
