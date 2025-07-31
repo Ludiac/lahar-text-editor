@@ -1,3 +1,4 @@
+#include <sys/cdefs.h>
 module;
 
 #include "macros.hpp"
@@ -46,19 +47,35 @@ struct UIQuadVertex {
 
 export struct Quad {
   glm::vec2 position;
-  vk::Extent2D size;
+  glm::vec2 size;
   glm::vec4 color;
   float zLayer;
 };
 
 struct UIInstanceData {
-  Quad quad;
-  float padding[3]; // Explicit padding to fill up to a 16-byte boundary or for future use
-  // Future SDF parameters:
-  float cornerRadius;
-  float borderWidth;
-  float padding2[2]; // Padding for the next float4
-};
+  glm::vec2 screenPos;
+  glm::vec2 size;
+  glm::vec4 color; // Base tint color, multiplied with the final fragment color.
+
+  glm::vec4 borderColor{1.0, 1.0, 1.0, 1.0};
+  glm::vec4 gradientColorStart{1.0, 1.0, 1.0, 1.0};
+  glm::vec4 gradientColorEnd{1.0, 1.0, 1.0, 1.0};
+
+  float cornerRadius{0.0};
+  float borderWidth{1.0};
+  /**
+   * @brief Type of gradient to apply.
+   * 0: Solid Color (uses gradientColorStart)
+   * 1: Vertical Linear
+   * 2: Horizontal Linear
+   * 3: Radial
+   */
+  u32 gradientType{0};
+
+  float z_layer;
+
+  float _padding[8];
+} __attribute__((aligned(16)));
 
 export struct RenderBatch {
   // A key for sorting. Lower numbers are drawn first.

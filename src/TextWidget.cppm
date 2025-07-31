@@ -18,7 +18,7 @@ struct TextWidgetCreateInfo {
   Font *font;
   double fontPointSize;
   glm::vec2 position;
-  vk::Extent2D size;
+  glm::vec2 size;
   glm::vec4 textColor;
   glm::vec4 bgColor;
 };
@@ -26,7 +26,6 @@ struct TextWidgetCreateInfo {
 // TextWidget class
 class TextWidget {
 private:
-  TextEditor *m_editor;
   TextView m_view;
   glm::vec2 m_position;
   glm::vec4 m_bgColor;
@@ -37,18 +36,24 @@ private:
 
 public:
   TextWidget(const TextWidgetCreateInfo &ci)
-      : m_editor(ci.editor), m_view(*ci.editor, ci.font, ci.fontPointSize, ci.size),
-        m_position(ci.position), m_bgColor(ci.bgColor), m_textColor(ci.textColor) {}
+      : m_view(ci.editor, ci.font, ci.fontPointSize, ci.size), m_position(ci.position),
+        m_bgColor(ci.bgColor), m_textColor(ci.textColor) {}
+
+  TextView *getActiveViewFORINPUTHANDLER() { return &m_view; }
+
+  void move(float dx, float dy) {
+    m_position.x += dx;
+    m_position.y += dy;
+  }
 
   void setFont(Font *font) { m_view.setFont(font); }
 
-  TextEditor *getEditor() { return m_editor; }
   [[nodiscard]] bool isActive() const { return m_isActive; }
   void setActive(bool active) { m_isActive = active; }
 
   void draw(UISystem &uiSystem, TextSystem &textSystem) {
     Font *font = m_view.getFont();
-    if (!font || !m_editor) {
+    if (font == nullptr) {
       return;
     }
 
@@ -57,7 +62,7 @@ public:
 
     usize firstLine = m_view.getFirstVisibleLine();
     usize numLines = m_view.getVisibleLineCount();
-    usize lastLine = std::min(firstLine + numLines, m_editor->lineCount());
+    usize lastLine = std::min(firstLine + numLines, m_view.getEditor()->lineCount());
 
     const f64 POINT_SIZE = m_view.fontPointSize;
     const f64 FONT_UNIT_TO_PIXEL_SCALE = POINT_SIZE * (96.0 / 72.0) / font->atlasData.unitsPerEm;
@@ -67,7 +72,7 @@ public:
 
     usize maxCol = m_view.maxColumnsInView();
     for (usize i = firstLine; i < lastLine; ++i) {
-      const std::string &line = m_editor->getLine(i);
+      const std::string &line = m_view.getEditor()->getLine(i);
       // Only take the substring that is actually visible
       std::string visible = line.substr(0, maxCol);
       textSystem.queueText(font, visible, m_view.fontPointSize, m_position.x, currentLineYpos,
@@ -76,12 +81,12 @@ public:
     }
     // Draw Cursor
     if (m_isActive) {
-      auto [cursorLine, cursorCol] = m_editor->getCursorLineCol();
+      auto [cursorLine, cursorCol] = m_view.getEditor()->getCursorLineCol();
       if (cursorCol > maxCol) {
         return; // cursor is fully off-screen horizontally
       }
       if (cursorLine >= firstLine && cursorLine < lastLine) {
-        std::string lineToCursor = m_editor->getLine(cursorLine).substr(0, cursorCol);
+        std::string lineToCursor = m_view.getEditor()->getLine(cursorLine).substr(0, cursorCol);
 
         double cursorX = m_position.x;
         double textWidth = 0.0;
@@ -99,7 +104,7 @@ public:
 
         double cursorY = m_position.y + ((cursorLine - firstLine) * LINE_HEIGHT_PX);
         uiSystem.queueQuad({.position = {(f32)cursorX, (f32)cursorY},
-                            .size = {.width = 2, .height = static_cast<u32>(LINE_HEIGHT_PX)},
+                            .size = {2.0, static_cast<float>(LINE_HEIGHT_PX)},
                             .color = m_textColor,
                             .zLayer = 0.0});
       }

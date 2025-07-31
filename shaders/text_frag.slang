@@ -60,7 +60,7 @@ FragmentOutput main(VertexToFragment input) {
         case AA_SMOOTHSTEP: {
             // High-quality anti-aliasing using smoothstep over the screen-space gradient.
             float screenPxGradient = fwidth(screenPxDistance);
-            opacity = smoothstep(-screenPxGradient, screenPxGradient, screenPxDistance);
+            opacity = smoothstep(-screenPxGradient * 0.5, screenPxGradient * 0.5, screenPxDistance);
             break;
         }
         case AA_LINEAR_CLAMP: {

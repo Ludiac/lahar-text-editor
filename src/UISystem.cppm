@@ -88,7 +88,10 @@ public:
     if (m_queuedInstances.size() >= m_maxQuadsPerFrame) {
       return;
     }
-    m_queuedInstances.emplace_back(UIInstanceData{.quad = quad});
+    m_queuedInstances.emplace_back(UIInstanceData{.screenPos = quad.position,
+                                                  .size = quad.size,
+                                                  .color = quad.color,
+                                                  .z_layer = quad.zLayer});
   }
 
   // REPLACES the old `draw` method.

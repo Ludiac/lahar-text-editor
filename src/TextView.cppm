@@ -42,13 +42,34 @@ public:
    * @param editor A reference to the TextEditor model.
    * @param font A pointer to the Font used for metrics.
    */
-  TextView(TextEditor &editor, Font *font, f64 pointSize, vk::Extent2D sizeParameter)
+  TextView(TextEditor *editor, Font *font, f64 pointSize, glm::vec2 sizeParameter)
       : m_editor(editor), m_font(font), fontPointSize(pointSize), size(sizeParameter) {}
 
-  // --- Configuration ---
+  TextEditor *getEditor() { return m_editor; }
 
   void setFont(Font *font) { m_font = font; }
   [[nodiscard]] Font *getFont() const { return m_font; }
+
+  void changeSize(i32 deltaWidth, i32 deltaHeight) {
+    // Ensure size doesn't become negative.
+    if (deltaWidth < 0 && size.x < static_cast<u32>(-deltaWidth)) {
+      size.x = 0;
+    } else {
+      size.x += deltaWidth;
+    }
+    if (deltaHeight < 0 && size.y < static_cast<u32>(-deltaHeight)) {
+      size.y = 0;
+    } else {
+      size.y += deltaHeight;
+    }
+  }
+
+  void changeFontPointSize(f64 delta) {
+    fontPointSize += delta;
+    if (fontPointSize < 1.0) {
+      fontPointSize = 1.0;
+    }
+  }
 
   /**
    * @brief Scrolls the view vertically by a number of lines.
@@ -56,7 +77,7 @@ public:
    */
   void scroll(i32 deltaLines) {
     if (deltaLines > 0) {
-      usize maxFirstLine = m_editor.lineCount() > 0 ? m_editor.lineCount() - 1 : 0;
+      usize maxFirstLine = m_editor->lineCount() > 0 ? m_editor->lineCount() - 1 : 0;
       m_firstVisibleLine = std::min(m_firstVisibleLine + (usize)deltaLines, maxFirstLine);
     } else if (deltaLines < 0) {
       usize scrollAmount = -deltaLines;
@@ -117,7 +138,7 @@ public:
         fontPointSize * (96.0 / 72.0) / m_font->atlasData.unitsPerEm;
     const f64 LINE_HEIGHT_PX = m_font->atlasData.lineHeight * FONT_UNIT_TO_PIXEL_SCALE;
 
-    return static_cast<usize>(size.height / LINE_HEIGHT_PX);
+    return static_cast<usize>(size.y / LINE_HEIGHT_PX);
   }
 
   [[nodiscard]] usize maxColumnsInView() const {
@@ -126,14 +147,14 @@ public:
     const f64 AVG_ADVANCE =
         m_font->atlasData.glyphs.begin()->second.advance * FONT_UNIT_TO_PIXEL_SCALE;
 
-    return static_cast<usize>(size.width / AVG_ADVANCE);
+    return static_cast<usize>(size.x / AVG_ADVANCE);
   }
 
-  vk::Extent2D size;
+  glm::vec2 size;
   f64 fontPointSize;
 
 private:
-  TextEditor &m_editor;
+  TextEditor *m_editor;
   Font *m_font;
 
   // Viewport state

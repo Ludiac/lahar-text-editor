@@ -187,10 +187,11 @@ public:
   TwoDEngine(VulkanDevice &device, u32 frameCount, BS::thread_pool<> &threadPool)
       : m_device(device), m_frameCount(frameCount), m_thread_pool(threadPool) {}
 
-  TextEditor *getActiveTextEditor() {
-    if (m_textWidgets.empty())
+  TextWidget *getActiveWidget() {
+    if (m_textWidgets.empty()) {
       return nullptr;
-    return m_textWidgets[m_activeWidgetIndex].getEditor();
+    }
+    return &m_textWidgets[m_activeWidgetIndex];
   }
 
   void cycleActiveWidgetFocus() {
@@ -261,7 +262,7 @@ public:
                                                             .font = font,
                                                             .fontPointSize = 36.0,
                                                             .position = {100.0, 100.0},
-                                                            .size = {.width = 400, .height = 500},
+                                                            .size = {400., 500.},
                                                             .textColor = {1.0, 1.0, 1.0, 1.0},
                                                             .bgColor = {0.1, 0.1, 0.1, 1.0}});
             m_textWidgets.back().setActive(true);
@@ -272,9 +273,10 @@ public:
                                                             .font = font,
                                                             .fontPointSize = 18.0,
                                                             .position = {500.0, 100.0},
-                                                            .size = {.width = 400, .height = 300},
+                                                            .size = {400., 300.},
                                                             .textColor = {0.0, 1.0, 1.0, 1.0},
                                                             .bgColor = {0.2, 0.2, 0.2, 1.0}});
+            cycleActiveWidgetFocus();
           }
         } else {
           std::println("failed to load font asynchronously: {}", res.error());

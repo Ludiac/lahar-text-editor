@@ -6,7 +6,8 @@ export module vulkan_app:InputHandler;
 
 import std;
 
-import :TextEditor;
+import :TextWidget; // Import TextWidget
+import :TwoDEngine;
 
 // Represents the two primary input modes for the application.
 enum class InputMode {
@@ -18,12 +19,11 @@ export class InputHandler {
 public:
   /**
    * @brief Constructs the input handler.
-   * @param editor A reference to the main text editor model to be modified by input.
    */
-  InputHandler(SDL_Window *window, TextEditor *editor) : m_window(window), m_editor(editor) {
+  InputHandler(SDL_Window *window, TwoDEngine *twoDEngine)
+      : m_windowPtr(window), m_twoDEnginePtr(twoDEngine) {
     // We start in NORMAL mode, so text input events are not needed initially.
-    // This is the default state for SDL, but we call it explicitly for clarity.
-    SDL_StopTextInput(m_window);
+    SDL_StopTextInput(m_windowPtr);
   }
 
   /**
@@ -32,63 +32,49 @@ public:
    * @param event The SDL_Event to process.
    */
   void handleEvent(const SDL_Event &event) {
-    // As per the guide, we use SDL_EVENT_KEY_DOWN for command-like actions.
+    if (!m_twoDEnginePtr || m_twoDEnginePtr->getActiveWidget() == nullptr) {
+      return; // Do nothing if no widget is active
+    }
+
     if (event.type == SDL_EVENT_KEY_DOWN) {
       handleKeyDown(event.key);
-    }
-    // For actual text entry, SDL_EVENT_TEXT_INPUT is the correct, modern approach.
-    // It correctly handles different keyboard layouts, dead keys, and IMEs.
-    else if (event.type == SDL_EVENT_TEXT_INPUT && m_mode == InputMode::INSERT) {
-      if (m_editor) {
-        m_editor->insert(event.text.text);
+    } else if (event.type == SDL_EVENT_TEXT_INPUT && m_mode == InputMode::INSERT) {
+      TextView *view = m_twoDEnginePtr->getActiveWidget()->getActiveViewFORINPUTHANDLER();
+      TextEditor *editor = view->getEditor();
+      if (editor != nullptr) {
+        editor->insert(event.text.text);
       }
     }
   }
 
   /**
    * @brief Returns the current input mode.
-   * Useful for displaying status in the UI or altering other application logic.
-   * @return The current InputMode.
    */
   [[nodiscard]] InputMode getMode() const { return m_mode; }
 
-  void setSDLwindow(SDL_Window *window) { m_window = window; };
-  void setEditor(TextEditor *editor) { m_editor = editor; }
-
-  [[nodiscard]] bool shouldCycleFocus() const { return m_cycleFocusRequested; }
-  void resetCycleFocusFlag() { m_cycleFocusRequested = false; }
+  void setSDLwindow(SDL_Window *window) { m_windowPtr = window; };
+  void set2DEngine(TwoDEngine *twoDEngine) { m_twoDEnginePtr = twoDEngine; };
 
 private:
   /**
    * @brief Handles all key down events, delegating to mode-specific handlers.
-   * @param keyEvent The SDL_KeyboardEvent from the event loop.
    */
   void handleKeyDown(const SDL_KeyboardEvent &keyEvent) {
-    // Per SDL3 best practices, we should ignore key repeat events for
-    // single-shot actions like changing modes or triggering commands.
     if (keyEvent.repeat != 0) {
-      // Allow repeats for navigation and deletion
-      bool is_nav_key =
-          (keyEvent.key == SDLK_H || keyEvent.key == SDLK_L || keyEvent.key == SDLK_K ||
-           keyEvent.key == SDLK_J || keyEvent.key == SDLK_UP || keyEvent.key == SDLK_DOWN ||
-           keyEvent.key == SDLK_LEFT || keyEvent.key == SDLK_RIGHT);
+      // Allow repeats for navigation, deletion, and widget manipulation
+      bool is_nav_key = (keyEvent.key == SDLK_UP || keyEvent.key == SDLK_DOWN ||
+                         keyEvent.key == SDLK_LEFT || keyEvent.key == SDLK_RIGHT);
 
-      if (is_nav_key) {
-        // Process navigation repeats regardless of mode
-      } else if (m_mode == InputMode::INSERT && keyEvent.key == SDLK_BACKSPACE) {
-        // Process backspace repeats
-      } else {
-        return; // Ignore other repeats
+      if (!is_nav_key && keyEvent.key != SDLK_BACKSPACE) {
+        return;
       }
     }
 
-    // The ESCAPE key is a global hotkey to always return to NORMAL mode.
     if (keyEvent.key == SDLK_ESCAPE) {
       setMode(InputMode::NORMAL);
       return;
     }
 
-    // Delegate to the handler for the current mode.
     switch (m_mode) {
     case InputMode::NORMAL:
       handleNormalMode(keyEvent);
@@ -100,72 +86,116 @@ private:
   }
 
   /**
-   * @brief Handles key presses in NORMAL mode (Vim-like commands).
-   * @param keyEvent The SDL_KeyboardEvent from the event loop.
+   * @brief Handles key presses in NORMAL mode (Vim-like commands and widget manipulation).
    */
   void handleNormalMode(const SDL_KeyboardEvent &keyEvent) {
-    if (!m_editor)
+    TextView *view = m_twoDEnginePtr->getActiveWidget()->getActiveViewFORINPUTHANDLER();
+    TextEditor *editor = view->getEditor();
+    if (editor == nullptr) {
       return;
-    switch (keyEvent.key) {
-    case SDLK_I:
-      setMode(InputMode::INSERT);
-      break;
-    case SDLK_H:
-    case SDLK_LEFT:
-      m_editor->moveCursorLeft();
-      break;
-    case SDLK_L:
-    case SDLK_RIGHT:
-      m_editor->moveCursorRight();
-      break;
-    case SDLK_K:
-    case SDLK_UP:
-      m_editor->moveCursorUp();
-      break;
-    case SDLK_J:
-    case SDLK_DOWN:
-      m_editor->moveCursorDown();
-      break;
-    case SDLK_TAB:
-      m_cycleFocusRequested = true;
-      break;
-    default:
-      break;
+    }
+
+    const SDL_Keymod modState = keyEvent.mod;
+    const bool isCtrlPressed = (modState & SDL_KMOD_CTRL);
+
+    constexpr float MOVE_SPEED = 10.0;
+    constexpr int RESIZE_SPEED = 10;
+
+    if (isCtrlPressed) {
+      // --- WIDGET RESIZING AND FONT SCALING ---
+      switch (keyEvent.key) {
+      case SDLK_UP:
+        view->changeSize(0, -RESIZE_SPEED);
+        break;
+      case SDLK_DOWN:
+        view->changeSize(0, RESIZE_SPEED);
+        break;
+      case SDLK_LEFT:
+        view->changeSize(-RESIZE_SPEED, 0);
+        break;
+      case SDLK_RIGHT:
+        view->changeSize(RESIZE_SPEED, 0);
+        break;
+      case SDLK_MINUS:
+        view->changeFontPointSize(-1.0);
+        break;
+      case SDLK_EQUALS: // Represents the '+' key
+        view->changeFontPointSize(1.0);
+        break;
+      default:
+        break;
+      }
+    } else {
+      // --- EDITOR NAVIGATION AND WIDGET MOVEMENT ---
+      switch (keyEvent.key) {
+      case SDLK_I:
+        setMode(InputMode::INSERT);
+        break;
+      // Widget Movement
+      case SDLK_UP:
+        m_twoDEnginePtr->getActiveWidget()->move(0, -MOVE_SPEED);
+        break;
+      case SDLK_DOWN:
+        m_twoDEnginePtr->getActiveWidget()->move(0, MOVE_SPEED);
+        break;
+      case SDLK_LEFT:
+        m_twoDEnginePtr->getActiveWidget()->move(-MOVE_SPEED, 0);
+        break;
+      case SDLK_RIGHT:
+        m_twoDEnginePtr->getActiveWidget()->move(MOVE_SPEED, 0);
+        break;
+      // Editor Cursor Movement (VIM keys)
+      case SDLK_H:
+        editor->moveCursorLeft();
+        break;
+      case SDLK_L:
+        editor->moveCursorRight();
+        break;
+      case SDLK_K:
+        editor->moveCursorUp();
+        break;
+      case SDLK_J:
+        editor->moveCursorDown();
+        break;
+
+      case SDLK_TAB:
+        m_twoDEnginePtr->cycleActiveWidgetFocus();
+        break;
+      default:
+        break;
+      }
     }
   }
 
   /**
-   * @brief Handles special key presses in INSERT mode (e.g., Backspace, Enter).
-   * Regular character input is handled by SDL_EVENT_TEXT_INPUT.
-   * @param keyEvent The SDL_KeyboardEvent from the event loop.
+   * @brief Handles special key presses in INSERT mode.
    */
   void handleInsertMode(const SDL_KeyboardEvent &keyEvent) {
-    if (!m_editor)
+    TextEditor *editor =
+        m_twoDEnginePtr->getActiveWidget()->getActiveViewFORINPUTHANDLER()->getEditor();
+    if (editor == nullptr) {
       return;
-
-    // Check for modifier keys.
-    const SDL_Keymod MOD = keyEvent.mod;
+    }
 
     switch (keyEvent.key) {
     case SDLK_BACKSPACE:
-      // TODO: Handle Ctrl+Backspace for word deletion
-      m_editor->backspace();
+      editor->backspace();
       break;
     case SDLK_RETURN:
-      m_editor->newline();
+      editor->newline();
       break;
     // Arrow keys for cursor movement within insert mode.
     case SDLK_LEFT:
-      m_editor->moveCursorLeft();
+      editor->moveCursorLeft();
       break;
     case SDLK_RIGHT:
-      m_editor->moveCursorRight();
+      editor->moveCursorRight();
       break;
     case SDLK_UP:
-      m_editor->moveCursorUp();
+      editor->moveCursorUp();
       break;
     case SDLK_DOWN:
-      m_editor->moveCursorDown();
+      editor->moveCursorDown();
       break;
     default:
       break;
@@ -174,28 +204,22 @@ private:
 
   /**
    * @brief Safely changes the input mode and manages SDL's text input state.
-   * @param newMode The mode to switch to.
    */
   void setMode(InputMode newMode) {
-    if (m_mode == newMode) {
-      return; // No change.
-    }
-
+    if (m_mode == newMode)
+      return;
     m_mode = newMode;
 
     if (m_mode == InputMode::INSERT) {
       std::println("Switching to INSERT mode.");
-      // Tell SDL to start sending SDL_EVENT_TEXT_INPUT events.
-      SDL_StartTextInput(m_window);
+      SDL_StartTextInput(m_windowPtr);
     } else {
       std::println("Switching to NORMAL mode.");
-      // Tell SDL to stop sending SDL_EVENT_TEXT_INPUT events.
-      SDL_StopTextInput(m_window);
+      SDL_StopTextInput(m_windowPtr);
     }
   }
 
-  SDL_Window *m_window;
-  TextEditor *m_editor{nullptr};
+  TwoDEngine *m_twoDEnginePtr;
+  SDL_Window *m_windowPtr;
   InputMode m_mode{InputMode::NORMAL};
-  bool m_cycleFocusRequested = false;
 };

@@ -190,12 +190,6 @@ private:
           m_inputHandler.handleEvent(event);
         }
 
-        if (m_inputHandler.shouldCycleFocus()) {
-          m_twoDEngine->cycleActiveWidgetFocus();
-          m_inputHandler.setEditor(m_twoDEngine->getActiveTextEditor());
-          m_inputHandler.resetCycleFocusFlag();
-        }
-
         if (event.type == SDL_EVENT_QUIT || (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
                                              event.window.windowID == SDL_GetWindowID(sdlWindow))) {
           done = true;
@@ -217,7 +211,6 @@ private:
 
       if (m_twoDEngine) {
         m_twoDEngine->processFontLoads();
-        m_inputHandler.setEditor(m_twoDEngine->getActiveTextEditor()); // crutch
       }
 
       if ((SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_MINIMIZED) != 0U) {
@@ -310,6 +303,7 @@ public:
       std::println("2D engine initialization failed: {}", res.error());
       return 1;
     }
+    m_inputHandler.set2DEngine(m_twoDEngine.get());
 
     // Setup ImGui
     IMGUI_CHECKVERSION();

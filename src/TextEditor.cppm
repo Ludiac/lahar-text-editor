@@ -324,6 +324,53 @@ public:
     return {lineIndex, colIndex};
   }
 
+  /**
+   * @brief Creates a TextEditor instance by loading content from a file.
+   * @param filePath The path to the file to load.
+   * @return An std::optional<TextEditor> containing the editor on success, or std::nullopt on
+   * failure.
+   */
+  [[nodiscard]] static std::expected<TextEditor, std::string>
+  loadFromFile(const std::filesystem::path &filePath) {
+    if (!std::filesystem::exists(filePath)) {
+      // If the file doesn't exist, create an empty editor.
+      // You could also return std::nullopt here if you prefer to treat it as an error.
+      return TextEditor("");
+    }
+
+    std::ifstream inFile(filePath, std::ios::binary);
+    if (!inFile) {
+      return std::unexpected(
+          std::format("Error: Could not open file for reading: {}", filePath.string()));
+    }
+
+    // Efficiently read the entire file into a string
+    std::string content((std::istreambuf_iterator<char>(inFile)), std::istreambuf_iterator<char>());
+
+    return TextEditor(content);
+  }
+
+  [[nodiscard]] std::expected<void, std::string>
+  saveToFile(const std::filesystem::path &filePath) const {
+    std::ofstream outFile(filePath, std::ios::binary | std::ios::trunc); // Truncate to overwrite
+    if (!outFile) {
+      return std::unexpected(
+          std::format("Error: Could not open file for writing: {}", filePath.string()));
+    }
+
+    // Iterate through the pieces and write their contents directly to the file
+    // This is much more efficient than calling toString() first.
+    for (const auto &piece : m_pieces) {
+      const std::string *buffer =
+          (piece.buffer == BufferType::ORIGINAL) ? m_original_buffer.get() : m_add_buffer.get();
+      if (!outFile.write(buffer->data() + piece.start, piece.length)) {
+        return std::unexpected(
+            std::format("Error: Could not write to a file: {}", filePath.string()));
+      }
+    }
+    return {};
+  }
+
 private:
   // --- Internal Helper Methods ---
 
